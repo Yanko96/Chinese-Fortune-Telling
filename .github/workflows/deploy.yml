@@ -1,0 +1,72 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+    
+    - name: Terraform Init
+      run: |
+        cd terraform/environments/production
+        terraform init
+      
+    - name: Terraform Validate
+      run: |
+        cd terraform/environments/production
+        terraform validate
+    
+    - name: Terraform Plan
+      run: |
+        cd terraform/environments/production
+        terraform plan -var="google_api_key=${{ secrets.GOOGLE_API_KEY }}"
+    
+    - name: Terraform Apply
+      run: |
+        cd terraform/environments/production
+        terraform apply -auto-approve -var="google_api_key=${{ secrets.GOOGLE_API_KEY }}"
+    
+    - name: Get ECR Repository URLs
+      id: get-ecr-urls
+      run: |
+        cd terraform/environments/production
+        echo "::set-output name=api_repo_url::$(terraform output -raw api_repository_url)"
+        echo "::set-output name=app_repo_url::$(terraform output -raw app_repository_url)"
+    
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+    
+    - name: Build and push API image
+      uses: docker/build-push-action@v2
+      with:
+        context: ./api
+        push: true
+        tags: ${{ steps.get-ecr-urls.outputs.api_repo_url }}:latest
+    
+    - name: Build and push App image
+      uses: docker/build-push-action@v2
+      with:
+        context: ./app
+        push: true
+        tags: ${{ steps.get-ecr-urls.outputs.app_repo_url }}:latest
+    
+    - name: Force ECS services to use new images
+      run: |
+        cd terraform/environments/production
+        terraform apply -auto-approve -var="google_api_key=${{ secrets.GOOGLE_API_KEY }}"
