@@ -9,7 +9,7 @@ from fortune_chat_interface import display_fortune_chat
 
 # Set page configuration
 st.set_page_config(
-    page_title="师太算命阁 | Master Shi Tai's Fortune Hall",
+    page_title="果赖算命阁 | Master Guo Lai's Fortune Hall",
     page_icon="🔮",
     layout="wide",
     initial_sidebar_state="expanded"
