@@ -82,3 +82,14 @@ variable "app_environment_variables" {
   }))
   default     = []
 }
+
+# 添加服务发现命名空间相关变量
+variable "service_discovery_namespace_id" {
+  description = "The ID of the service discovery namespace"
+  type        = string
+}
+
+variable "service_discovery_namespace_name" {
+  description = "The name of the service discovery namespace"
+  type        = string
+}

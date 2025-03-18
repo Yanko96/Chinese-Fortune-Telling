@@ -7,6 +7,26 @@ resource "aws_cloudwatch_log_group" "ecs_logs" {
   retention_in_days = 30
 }
 
+# 添加服务发现服务
+resource "aws_service_discovery_service" "api" {
+  name = "api"
+  
+  dns_config {
+    namespace_id = var.service_discovery_namespace_id
+    
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+    
+    routing_policy = "MULTIVALUE"
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
+  }
+}
+
 resource "aws_ecs_task_definition" "api" {
   family                   = "${var.project_name}-api"
   network_mode             = "awsvpc"
@@ -65,7 +85,13 @@ resource "aws_ecs_task_definition" "app" {
         }
       ]
       
-      environment = var.app_environment_variables
+      # 更新环境变量以使用服务发现DNS名称
+      environment = concat(var.app_environment_variables, [
+        {
+          name  = "API_URL",
+          value = "http://api.${var.service_discovery_namespace_name}:8000"
+        }
+      ])
       
       logConfiguration = {
         logDriver = "awslogs"
@@ -90,6 +116,11 @@ resource "aws_ecs_service" "api" {
     subnets         = var.subnet_ids
     security_groups = [var.security_group_id]
     assign_public_ip = true
+  }
+  
+  # 添加服务注册
+  service_registries {
+    registry_arn = aws_service_discovery_service.api.arn
   }
 }
 

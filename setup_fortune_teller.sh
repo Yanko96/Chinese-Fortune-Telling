@@ -45,7 +45,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "fortune_main:app", "--host", "0.0.0.0", "--port", "8000"]
 EOF
 
 # Frontend Dockerfile
@@ -76,8 +76,6 @@ services:
     volumes:
       - ./fortune_books:/app/fortune_books
       - ./chroma_db:/app/chroma_db
-    environment:
-      - GOOGLE_API_KEY=AIzaSyDOaLHNK9e2RhjR829X9P7ZSVzd2Nz-zN8
 
   fortune-app:
     build: ./app

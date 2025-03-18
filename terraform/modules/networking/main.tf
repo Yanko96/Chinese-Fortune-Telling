@@ -65,6 +65,15 @@ resource "aws_security_group" "ecs_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # 添加允许服务间通信的规则
+  ingress {
+    from_port       = 0
+    to_port         = 0
+    protocol        = "-1"
+    self            = true
+    description     = "Allow all traffic between services in this security group"
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -74,5 +83,16 @@ resource "aws_security_group" "ecs_sg" {
 
   tags = {
     Name = "${var.project_name}-ecs-sg"
+  }
+}
+
+# 添加服务发现命名空间
+resource "aws_service_discovery_private_dns_namespace" "main" {
+  name        = "fortune.local"
+  description = "Fortune Teller Service Discovery"
+  vpc      = aws_vpc.main.id
+
+  tags = {
+    Name = "${var.project_name}-namespace"
   }
 }

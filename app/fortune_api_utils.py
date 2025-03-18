@@ -7,6 +7,10 @@ import requests
 import streamlit as st
 from datetime import datetime
 
+import os
+
+API_URL = "http://api.fortune.local:8000"
+
 def get_fortune_response(question, session_id, model, query_type="general", birth_date=None, birth_gender=None, zodiac_sign=None):
     """
     Send a fortune telling request to the backend API.
@@ -47,7 +51,7 @@ def get_fortune_response(question, session_id, model, query_type="general", birt
         data["zodiac_sign"] = zodiac_sign
 
     try:
-        response = requests.post("http://fortune-api:8000/fortune", headers=headers, json=data)
+        response = requests.post(f"{API_URL}/fortune", headers=headers, json=data)
         if response.status_code == 200:
             return response.json()
         else:
@@ -60,7 +64,7 @@ def get_fortune_response(question, session_id, model, query_type="general", birt
 def get_zodiac_signs():
     """Get the list of Chinese zodiac signs from the API."""
     try:
-        response = requests.get("http://fortune-api:8000/zodiac-signs")
+        response = requests.get(f"{API_URL}/zodiac-signs")
         if response.status_code == 200:
             return response.json()
         else:
@@ -80,7 +84,7 @@ def get_zodiac_signs():
 def get_fortune_methods():
     """Get the list of fortune telling methods from the API."""
     try:
-        response = requests.get("http://fortune-api:8000/fortune-methods")
+        response = requests.get(f"{API_URL}/fortune-methods")
         if response.status_code == 200:
             return response.json()
         else:
