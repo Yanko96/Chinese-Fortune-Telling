@@ -1,4 +1,5 @@
 langchain
+langchain-google-genai
 langchain-openai
 langchain-core
 langchain_community
@@ -7,3 +8,8 @@ pypdf
 langchain_chroma
 python-multipart
 streamlit
+streamlit-chat
+streamlit-extras
+chinese-calendar
+lunardate
+sentence-transformers
