@@ -1,0 +1,20 @@
+{
+    "fortune_books": [
+        {
+            "filename": "san_ming_tong_hui.pdf",
+            "title": "三命通会",
+            "description": "A comprehensive text on BaZi (八字) and destiny analysis"
+        },
+        {
+            "filename": "di_tian_sui.pdf",
+            "title": "滴天髓",
+            "description": "Essential teachings on BaZi interpretation"
+        },
+        {
+            "filename": "zi_ping_zhen_quan.pdf",
+            "title": "子平真诠",
+            "description": "Detailed explanation of destiny calculation methods"
+        }
+    ],
+    "last_updated": "2025-03-17T11:08:23.576548"
+}
