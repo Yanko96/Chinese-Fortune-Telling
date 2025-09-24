@@ -1,0 +1,6 @@
+streamlit
+streamlit-extras
+requests
+chinese-calendar
+lunardate
+fpdf
