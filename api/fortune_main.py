@@ -24,8 +24,8 @@ app = FastAPI()
 
 # Enums and Models
 class ModelName(str, Enum):
-    GEMINI_FLASH = "gemini-2.5-flash"
-    GEMINI_PRO = "gemini-2.5-pro"
+    GEMINI_FLASH = "gemini-2.0-flash"
+    GEMINI_PRO = "gemini-2.0-pro"
 
 class QueryType(str, Enum):
     GENERAL = "general"
