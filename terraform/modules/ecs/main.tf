@@ -122,6 +122,19 @@ resource "aws_ecs_service" "api" {
   service_registries {
     registry_arn = aws_service_discovery_service.api.arn
   }
+
+  # ALB Target Group 配置
+  dynamic "load_balancer" {
+    for_each = var.api_target_group_arn != "" ? [1] : []
+    content {
+      target_group_arn = var.api_target_group_arn
+      container_name   = "${var.project_name}-api-container"
+      container_port   = 8000
+    }
+  }
+
+  # 等待ALB target group注册完成
+  depends_on = [var.api_target_group_arn]
 }
 
 resource "aws_ecs_service" "app" {
@@ -136,6 +149,19 @@ resource "aws_ecs_service" "app" {
     security_groups = [var.security_group_id]
     assign_public_ip = true
   }
+
+  # ALB Target Group 配置
+  dynamic "load_balancer" {
+    for_each = var.app_target_group_arn != "" ? [1] : []
+    content {
+      target_group_arn = var.app_target_group_arn
+      container_name   = "${var.project_name}-app-container"
+      container_port   = 8501
+    }
+  }
+
+  # 等待ALB target group注册完成
+  depends_on = [var.app_target_group_arn]
 }
 
 resource "aws_iam_role" "ecs_execution_role" {
