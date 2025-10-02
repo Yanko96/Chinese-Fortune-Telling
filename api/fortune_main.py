@@ -20,7 +20,11 @@ os.environ["GOOGLE_API_KEY"] = os.environ.get("GOOGLE_API_KEY", "")
 
 # Set up logging
 logging.basicConfig(filename='fortune_app.log', level=logging.INFO)
-app = FastAPI()
+
+# Support mounting the API behind a path prefix (e.g., "/api") when using an ALB
+# Configure via env: API_ROOT_PATH=/api
+API_ROOT_PATH = os.getenv("API_ROOT_PATH", "")
+app = FastAPI(root_path=API_ROOT_PATH)
 
 # Enums and Models
 class ModelName(str, Enum):
@@ -61,73 +65,87 @@ def validate_birth_date(birth_date: str) -> bool:
     return True
 
 # API Endpoints
+@app.get("/healthz")
+@app.get("/api/healthz")
+def healthz():
+    return {"status": "ok"}
+
 @app.post("/fortune", response_model=FortuneResponse)
+@app.post("/api/fortune", response_model=FortuneResponse)
 def get_fortune(fortune_input: FortuneInput):
-    # Initialize session if needed
-    session_id = fortune_input.session_id or str(uuid.uuid4())
-    
-    # Log the request
-    logging.info(
-        f"Session ID: {session_id}, Query Type: {fortune_input.query_type.value}, "
-        f"Question: {fortune_input.question}, Model: {fortune_input.model.value}"
-    )
-    
-    # Validate inputs for specific query types
-    if fortune_input.query_type == QueryType.BAZI and not validate_birth_date(fortune_input.birth_date):
-        raise HTTPException(
-            status_code=400, 
-            detail="Valid birth date (YYYY-MM-DD HH:MM) is required for BaZi analysis"
+    try:
+        # Initialize session if needed
+        session_id = fortune_input.session_id or str(uuid.uuid4())
+
+        # Log the request
+        logging.info(
+            f"Session ID: {session_id}, Query Type: {fortune_input.query_type.value}, "
+            f"Question: {fortune_input.question}, Model: {fortune_input.model.value}"
         )
-    
-    # Get chat history
-    chat_history = get_chat_history(session_id)
-    
-    # Process input based on query type
-    if fortune_input.query_type == QueryType.BAZI:
-        # For BaZi analysis, we add birth date to the question
-        question = (
-            f"BaZi analysis for someone born on {fortune_input.birth_date}, "
-            f"gender: {fortune_input.birth_gender or 'not specified'}. {fortune_input.question}"
+
+        # Validate inputs for specific query types
+        if fortune_input.query_type == QueryType.BAZI and not validate_birth_date(fortune_input.birth_date):
+            raise HTTPException(
+                status_code=400,
+                detail="Valid birth date (YYYY-MM-DD HH:MM) is required for BaZi analysis"
+            )
+
+        # Get chat history
+        chat_history = get_chat_history(session_id)
+
+        # Process input based on query type
+        if fortune_input.query_type == QueryType.BAZI:
+            # For BaZi analysis, we add birth date to the question
+            question = (
+                f"BaZi analysis for someone born on {fortune_input.birth_date}, "
+                f"gender: {fortune_input.birth_gender or 'not specified'}. {fortune_input.question}"
+            )
+        elif fortune_input.query_type == QueryType.FORECAST:
+            # For yearly forecast
+            current_year = datetime.now().year
+            question = (
+                f"Yearly forecast for {current_year} for {fortune_input.zodiac_sign or 'a person'} "
+                f"with the question: {fortune_input.question}"
+            )
+        else:
+            # General fortune telling question
+            question = fortune_input.question
+
+        # Get the appropriate chain
+        fortune_chain = get_fortune_chain(
+            query_type=fortune_input.query_type.value,
+            model=fortune_input.model.value
         )
-    elif fortune_input.query_type == QueryType.FORECAST:
-        # For yearly forecast
-        current_year = datetime.now().year
-        question = (
-            f"Yearly forecast for {current_year} for {fortune_input.zodiac_sign or 'a person'} "
-            f"with the question: {fortune_input.question}"
+
+        # Generate the fortune
+        fortune_result = fortune_chain.invoke({
+            "input": question,
+            "chat_history": chat_history
+        })
+
+        # Extract the answer
+        answer = fortune_result.get('answer', "I cannot see clearly at this moment. Please ask again.")
+
+        # Log the response
+        insert_application_logs(session_id, question, answer, fortune_input.model.value)
+        logging.info(f"Session ID: {session_id}, AI Response: {answer[:100]}...")
+
+        # Return the response
+        return FortuneResponse(
+            answer=answer,
+            session_id=session_id,
+            model=fortune_input.model,
+            query_type=fortune_input.query_type
         )
-    else:
-        # General fortune telling question
-        question = fortune_input.question
-    
-    # Get the appropriate chain
-    fortune_chain = get_fortune_chain(
-        query_type=fortune_input.query_type.value,
-        model=fortune_input.model.value
-    )
-    
-    # Generate the fortune
-    fortune_result = fortune_chain.invoke({
-        "input": question,
-        "chat_history": chat_history
-    })
-    
-    # Extract the answer
-    answer = fortune_result.get('answer', "I cannot see clearly at this moment. Please ask again.")
-    
-    # Log the response
-    insert_application_logs(session_id, question, answer, fortune_input.model.value)
-    logging.info(f"Session ID: {session_id}, AI Response: {answer[:100]}...")
-    
-    # Return the response
-    return FortuneResponse(
-        answer=answer,
-        session_id=session_id,
-        model=fortune_input.model,
-        query_type=fortune_input.query_type
-    )
+    except HTTPException:
+        # Propagate HTTP exceptions as-is
+        raise
+    except Exception as e:
+        logging.exception("Unhandled exception in /fortune")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/zodiac-signs", response_model=List[str])
+@app.get("/api/zodiac-signs", response_model=List[str])
 def get_zodiac_signs():
     """Returns a list of the 12 Chinese zodiac signs."""
     return [
@@ -137,6 +155,7 @@ def get_zodiac_signs():
     ]
 
 @app.get("/fortune-methods", response_model=List[dict])
+@app.get("/api/fortune-methods", response_model=List[dict])
 def get_fortune_methods():
     """Returns a list of fortune telling methods with descriptions."""
     return [

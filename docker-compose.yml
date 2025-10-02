@@ -8,7 +8,9 @@ services:
     volumes:
       - ./fortune_books:/app/fortune_books
       - ./chroma_db:/app/chroma_db
-    command: uvicorn fortune_main:app --host 0.0.0.0 --port 8000
+    environment:
+      - API_ROOT_PATH=/api
+    command: uvicorn fortune_main:app --host 0.0.0.0 --port 8000 --root-path /api
 
   fortune-app:
     build: ./app
@@ -17,7 +19,7 @@ services:
     depends_on:
       - fortune-api
     environment:
-      - API_URL=http://fortune-api:8000
+      - API_URL=http://fortune-api:8000/api
 
 volumes:
   chroma_db:
