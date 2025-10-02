@@ -9,7 +9,8 @@ from datetime import datetime
 
 import os
 
-API_URL = "http://api.fortune.local:8000"
+# Prefer environment variable if set (e.g., from ECS task or local docker-compose)
+API_URL = os.getenv("API_URL", "http://api.fortune.local:8000")
 
 def get_fortune_response(question, session_id, model, query_type="general", birth_date=None, birth_gender=None, zodiac_sign=None):
     """

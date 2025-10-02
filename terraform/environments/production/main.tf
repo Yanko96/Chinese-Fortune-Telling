@@ -54,6 +54,10 @@ module "ecs" {
     {
       name  = "GOOGLE_API_KEY"
       value = var.google_api_key
+    },
+    {
+      name  = "API_ROOT_PATH"
+      value = "/api"
     }
   ]
   app_environment_variables = []
