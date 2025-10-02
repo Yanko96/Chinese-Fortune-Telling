@@ -27,9 +27,3 @@ variable "alb_security_group_ids" {
   type        = list(string)
   default     = []
 }
-
-variable "alb_security_group_ids" {
-  description = "Security group IDs of the ALB"
-  type        = list(string)
-  default     = []
-}
