@@ -93,3 +93,15 @@ variable "service_discovery_namespace_name" {
   description = "The name of the service discovery namespace"
   type        = string
 }
+
+variable "api_target_group_arn" {
+  description = "ARN of the ALB target group for API service"
+  type        = string
+  default     = ""
+}
+
+variable "app_target_group_arn" {
+  description = "ARN of the ALB target group for App service"
+  type        = string
+  default     = ""
+}

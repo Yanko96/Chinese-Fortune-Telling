@@ -21,3 +21,15 @@ variable "availability_zones" {
   type        = list(string)
   default     = ["us-east-1a", "us-east-1b"]
 }
+
+variable "alb_security_group_ids" {
+  description = "Security group IDs of the ALB"
+  type        = list(string)
+  default     = []
+}
+
+variable "alb_security_group_ids" {
+  description = "Security group IDs of the ALB"
+  type        = list(string)
+  default     = []
+}

@@ -51,11 +51,31 @@ resource "aws_security_group" "ecs_sg" {
   description = "Security group for ECS tasks"
   vpc_id      = aws_vpc.main.id
 
+  # 允许来自ALB的API流量
+  ingress {
+    from_port       = 8000
+    to_port         = 8000
+    protocol        = "tcp"
+    security_groups = var.alb_security_group_ids
+    description     = "Allow API traffic from ALB"
+  }
+
+  # 允许来自ALB的App流量
+  ingress {
+    from_port       = 8501
+    to_port         = 8501
+    protocol        = "tcp"
+    security_groups = var.alb_security_group_ids
+    description     = "Allow App traffic from ALB"
+  }
+
+  # 临时保留直接访问，待ALB部署完成后可以移除
   ingress {
     from_port   = 8000
     to_port     = 8000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "Temporary direct API access - remove after ALB deployment"
   }
 
   ingress {
@@ -63,6 +83,7 @@ resource "aws_security_group" "ecs_sg" {
     to_port     = 8501
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "Temporary direct App access - remove after ALB deployment"
   }
 
   # 添加允许服务间通信的规则
