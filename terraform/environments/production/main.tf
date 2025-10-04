@@ -53,6 +53,8 @@ module "ecs" {
   # Image tags to control deploys; set via CI/CD or manual tfvars
   api_image_tag                    = var.api_image_tag
   app_image_tag                    = var.app_image_tag
+  # Route frontend API calls through ALB public DNS with path prefix
+  app_api_url                      = "http://${module.alb.alb_dns_name}/api"
   api_environment_variables = [
     {
       name  = "GOOGLE_API_KEY"

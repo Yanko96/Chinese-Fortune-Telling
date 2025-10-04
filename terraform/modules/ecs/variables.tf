@@ -95,6 +95,14 @@ variable "app_environment_variables" {
   default     = []
 }
 
+# Optional override for the App's API base URL. If unset, defaults to
+# the Cloud Map private DNS name http://api.<namespace>:8000
+variable "app_api_url" {
+  description = "Base URL the App uses to call the API (e.g., http://<alb_dns_name>/api)"
+  type        = string
+  default     = ""
+}
+
 # 添加服务发现命名空间相关变量
 variable "service_discovery_namespace_id" {
   description = "The ID of the service discovery namespace"
