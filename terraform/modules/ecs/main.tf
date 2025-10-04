@@ -85,11 +85,11 @@ resource "aws_ecs_task_definition" "app" {
         }
       ]
       
-      # 更新环境变量以使用服务发现DNS名称
+      # 更新环境变量：优先使用外部提供的 app_api_url，其次回退到服务发现DNS名称
       environment = concat(var.app_environment_variables, [
         {
           name  = "API_URL",
-          value = "http://api.${var.service_discovery_namespace_name}:8000"
+          value = var.app_api_url != "" ? var.app_api_url : "http://api.${var.service_discovery_namespace_name}:8000"
         }
       ])
       
