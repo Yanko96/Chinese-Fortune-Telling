@@ -1,3 +1,83 @@
+name: Deploy to AWS (ECR + ECS via Terraform)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  PROJECT_NAME: fortune-teller # must match terraform/environments/production/variables.tf: project_name
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image variables
+        id: vars
+        run: |
+          echo "IMAGE_TAG=${GITHUB_SHA}" >> $GITHUB_OUTPUT
+          echo "API_REPO=${{ env.PROJECT_NAME }}-api" >> $GITHUB_OUTPUT
+          echo "APP_REPO=${{ env.PROJECT_NAME }}-app" >> $GITHUB_OUTPUT
+
+      - name: Build and push API image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.vars.outputs.IMAGE_TAG }}
+          API_REPO: ${{ steps.vars.outputs.API_REPO }}
+        run: |
+          docker build -t "$ECR_REGISTRY/$API_REPO:$IMAGE_TAG" -f api/Dockerfile api
+          docker push "$ECR_REGISTRY/$API_REPO:$IMAGE_TAG"
+
+      - name: Build and push App image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.vars.outputs.IMAGE_TAG }}
+          APP_REPO: ${{ steps.vars.outputs.APP_REPO }}
+        run: |
+          docker build -t "$ECR_REGISTRY/$APP_REPO:$IMAGE_TAG" -f app/Dockerfile app
+          docker push "$ECR_REGISTRY/$APP_REPO:$IMAGE_TAG"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: terraform/environments/production
+        run: terraform init -input=false
+
+      - name: Terraform Plan
+        id: tfplan
+        working-directory: terraform/environments/production
+        env:
+          IMAGE_TAG: ${{ steps.vars.outputs.IMAGE_TAG }}
+        run: |
+          terraform plan \
+            -input=false \
+            -var "api_image_tag=$IMAGE_TAG" \
+            -var "app_image_tag=$IMAGE_TAG" \
+            -var "google_api_key=${{ secrets.GOOGLE_API_KEY }}" \
+            -out tfplan
+
+      - name: Terraform Apply
+        if: steps.tfplan.outcome == 'success'
+        working-directory: terraform/environments/production
+        run: terraform apply -input=false -auto-approve tfplan
 name: Deploy to AWS
 
 on:

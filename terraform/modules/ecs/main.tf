@@ -39,7 +39,7 @@ resource "aws_ecs_task_definition" "api" {
   container_definitions = jsonencode([
     {
       name      = "${var.project_name}-api-container"
-      image     = "${var.api_image_url}:latest"
+  image     = "${var.api_image_url}:${var.api_image_tag}"
       essential = true
       
       portMappings = [
@@ -75,7 +75,7 @@ resource "aws_ecs_task_definition" "app" {
   container_definitions = jsonencode([
     {
       name      = "${var.project_name}-app-container"
-      image     = "${var.app_image_url}:latest"
+  image     = "${var.app_image_url}:${var.app_image_tag}"
       essential = true
       
       portMappings = [
@@ -111,6 +111,7 @@ resource "aws_ecs_service" "api" {
   task_definition = aws_ecs_task_definition.api.arn
   desired_count   = var.api_desired_count
   launch_type     = "FARGATE"
+  force_new_deployment = true
 
   network_configuration {
     subnets         = var.subnet_ids
@@ -143,6 +144,7 @@ resource "aws_ecs_service" "app" {
   task_definition = aws_ecs_task_definition.app.arn
   desired_count   = var.app_desired_count
   launch_type     = "FARGATE"
+  force_new_deployment = true
 
   network_configuration {
     subnets         = var.subnet_ids

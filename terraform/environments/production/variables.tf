@@ -33,3 +33,15 @@ variable "google_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "api_image_tag" {
+  description = "Tag for the API image to deploy (e.g., git SHA or 'latest')"
+  type        = string
+  default     = "latest"
+}
+
+variable "app_image_tag" {
+  description = "Tag for the App image to deploy (e.g., git SHA or 'latest')"
+  type        = string
+  default     = "latest"
+}
