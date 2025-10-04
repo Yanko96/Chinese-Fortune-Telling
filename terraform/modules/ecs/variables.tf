@@ -13,6 +13,18 @@ variable "app_image_url" {
   type        = string
 }
 
+variable "api_image_tag" {
+  description = "Tag for the API image (use immutable tags like git SHA)"
+  type        = string
+  default     = "latest"
+}
+
+variable "app_image_tag" {
+  description = "Tag for the App image (use immutable tags like git SHA)"
+  type        = string
+  default     = "latest"
+}
+
 variable "api_cpu" {
   description = "CPU units for API container"
   type        = string
