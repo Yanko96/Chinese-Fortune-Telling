@@ -21,7 +21,7 @@ from fortune_prompts import (
 retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 output_parser = StrOutputParser()
 
-def get_fortune_chain(query_type="general", model="gemini-2.0-pro-exp"):
+def get_fortune_chain(query_type="general", model="gemini-2.5-flash"):
     """
     Creates a specialized RAG chain for fortune telling.
     

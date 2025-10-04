@@ -9,6 +9,7 @@ from typing import Optional, List
 from enum import Enum
 import uuid
 import logging
+import sys
 import re
 from datetime import datetime
 
@@ -19,17 +20,26 @@ import os
 os.environ["GOOGLE_API_KEY"] = os.environ.get("GOOGLE_API_KEY", "")
 
 # Set up logging
-logging.basicConfig(filename='fortune_app.log', level=logging.INFO)
+# Configure logging to both file and stdout (so CloudWatch captures logs)
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler('fortune_app.log'),
+        logging.StreamHandler(sys.stdout)
+    ],
+    format='%(asctime)s %(levelname)s %(name)s: %(message)s'
+)
 
 # Support mounting the API behind a path prefix (e.g., "/api") when using an ALB
 # Configure via env: API_ROOT_PATH=/api
 API_ROOT_PATH = os.getenv("API_ROOT_PATH", "")
+DEBUG_MODE = os.getenv("DEBUG", "false").lower() in ("1", "true", "yes")
 app = FastAPI(root_path=API_ROOT_PATH)
 
 # Enums and Models
 class ModelName(str, Enum):
-    GEMINI_FLASH = "gemini-2.0-flash"
-    GEMINI_PRO = "gemini-2.0-pro"
+    GEMINI_25_FLASH = "gemini-2.5-flash"
+    GEMINI_20_FLASH = "gemini-2.0-flash"
 
 class QueryType(str, Enum):
     GENERAL = "general"
@@ -39,7 +49,7 @@ class QueryType(str, Enum):
 class FortuneInput(BaseModel):
     question: str
     session_id: Optional[str] = Field(default=None)
-    model: ModelName = Field(default=ModelName.GEMINI_PRO)
+    model: ModelName = Field(default=ModelName.GEMINI_25_FLASH)
     query_type: QueryType = Field(default=QueryType.GENERAL)
     birth_date: Optional[str] = Field(default=None)  # Format: YYYY-MM-DD HH:MM
     birth_gender: Optional[str] = Field(default=None)  # "male" or "female"
@@ -111,6 +121,7 @@ def get_fortune(fortune_input: FortuneInput):
             # General fortune telling question
             question = fortune_input.question
 
+        # Map non-exp to exp variant for Gemini 2.0 API support
         # Get the appropriate chain
         fortune_chain = get_fortune_chain(
             query_type=fortune_input.query_type.value,
@@ -142,7 +153,11 @@ def get_fortune(fortune_input: FortuneInput):
         raise
     except Exception as e:
         logging.exception("Unhandled exception in /fortune")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        # Only expose internal details when DEBUG is explicitly enabled
+        if DEBUG_MODE:
+            raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+        else:
+            raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/zodiac-signs", response_model=List[str])
 @app.get("/api/zodiac-signs", response_model=List[str])
