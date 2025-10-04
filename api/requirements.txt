@@ -13,3 +13,5 @@ streamlit-extras
 chinese-calendar
 lunardate
 sentence-transformers
+fastapi
+uvicorn

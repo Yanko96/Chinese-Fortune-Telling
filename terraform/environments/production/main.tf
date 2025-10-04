@@ -58,6 +58,10 @@ module "ecs" {
     {
       name  = "API_ROOT_PATH"
       value = "/api"
+    },
+    {
+      name  = "DEBUG"
+      value = "true"
     }
   ]
   app_environment_variables = []

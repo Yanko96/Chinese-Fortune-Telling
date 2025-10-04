@@ -3,13 +3,13 @@ from enum import Enum
 from datetime import datetime
 
 class ModelName(str, Enum):
-    GEMINI_FLASH = "gemini-2.0-flash-exp"
-    GEMINI_PRO = "gemini-2.0-pro-exp"
+    GEMINI_25_FLASH = "gemini-2.5-flash"
+    GEMINI_20_FLASH = "gemini-2.0-flash"
 
 class QueryInput(BaseModel):
     question: str
     session_id: str = Field(default=None)
-    model: ModelName = Field(default=ModelName.GEMINI_FLASH)
+    model: ModelName = Field(default=ModelName.GEMINI_25_FLASH)
 
 class QueryResponse(BaseModel):
     answer: str

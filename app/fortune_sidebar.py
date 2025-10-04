@@ -14,7 +14,7 @@ def display_fortune_sidebar():
     st.sidebar.markdown("### Master Guo Lai's Fortune Hall")
     
     # Model Selection
-    model_options = ["gemini-2.0-pro-exp", "gemini-2.0-flash-exp"]
+    model_options = ["gemini-2.5-flash", "gemini-2.0-flash"]
     st.sidebar.selectbox(
         "Select Oracle Engine", 
         options=model_options, 

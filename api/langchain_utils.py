@@ -39,7 +39,7 @@ qa_prompt = ChatPromptTemplate.from_messages([
 
 
 
-def get_rag_chain(model="gemini-2.0-flash-exp"):
+def get_rag_chain(model="gemini-2.5-flash"):
     llm = ChatGoogleGenerativeAI(
         model=model,
         temperature=0.5,
