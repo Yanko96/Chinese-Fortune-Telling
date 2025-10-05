@@ -9,7 +9,7 @@ from langchain.chains import create_history_aware_retriever, create_retrieval_ch
 from langchain.chains.combine_documents import create_stuff_documents_chain
 import os
 
-from chroma_utils import vectorstore
+from chroma_utils import get_vectorstore
 from fortune_prompts import (
     fortune_contextualize_prompt, 
     fortune_qa_prompt,
@@ -18,7 +18,7 @@ from fortune_prompts import (
 )
 
 # Set up retriever
-retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+retriever = get_vectorstore().as_retriever(search_kwargs={"k": 3})
 output_parser = StrOutputParser()
 
 def get_fortune_chain(query_type="general", model="gemini-2.5-flash"):

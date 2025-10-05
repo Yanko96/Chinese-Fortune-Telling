@@ -55,6 +55,9 @@ module "ecs" {
   app_image_tag                    = var.app_image_tag
   # Route frontend API calls through ALB public DNS with path prefix
   app_api_url                      = "http://${module.alb.alb_dns_name}/api"
+  # Increase API resources to reduce OOM kills
+  api_cpu                          = var.api_cpu
+  api_memory                       = var.api_memory
   api_environment_variables = [
     {
       name  = "GOOGLE_API_KEY"

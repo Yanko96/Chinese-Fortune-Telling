@@ -1,6 +1,5 @@
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, UnstructuredHTMLLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-# from langchain_openai import 
 from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings
 from langchain_chroma import Chroma
 from typing import List
@@ -8,9 +7,24 @@ from langchain_core.documents import Document
 import os
 
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200, length_function=len)
-# embedding_function = OpenAIEmbeddings()
-embedding_function = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
-vectorstore = Chroma(persist_directory="./chroma_db", embedding_function=embedding_function)
+
+# Lazy-loaded globals to reduce startup memory footprint
+_embedding_function = None
+_vectorstore = None
+
+def get_embedding_function():
+    global _embedding_function
+    if _embedding_function is None:
+        model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        _embedding_function = SentenceTransformerEmbeddings(model_name=model_name)
+    return _embedding_function
+
+def get_vectorstore():
+    global _vectorstore
+    if _vectorstore is None:
+        persist_dir = os.getenv("CHROMA_DIR", "./chroma_db")
+        _vectorstore = Chroma(persist_directory=persist_dir, embedding_function=get_embedding_function())
+    return _vectorstore
 
 def load_and_split_document(file_path: str) -> List[Document]:
     if file_path.endswith('.pdf'):
@@ -33,7 +47,7 @@ def index_document_to_chroma(file_path: str, file_id: int) -> bool:
         for split in splits:
             split.metadata['file_id'] = file_id
         
-        vectorstore.add_documents(splits)
+        get_vectorstore().add_documents(splits)
         # vectorstore.persist()
         return True
     except Exception as e:
@@ -42,10 +56,10 @@ def index_document_to_chroma(file_path: str, file_id: int) -> bool:
 
 def delete_doc_from_chroma(file_id: int):
     try:
-        docs = vectorstore.get(where={"file_id": file_id})
+        docs = get_vectorstore().get(where={"file_id": file_id})
         print(f"Found {len(docs['ids'])} document chunks for file_id {file_id}")
         
-        vectorstore._collection.delete(where={"file_id": file_id})
+        get_vectorstore()._collection.delete(where={"file_id": file_id})
         print(f"Deleted all documents with file_id {file_id}")
         
         return True
