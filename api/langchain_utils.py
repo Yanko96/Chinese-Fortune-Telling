@@ -8,8 +8,8 @@ from typing import List
 from langchain_core.documents import Document
 import os
 
-from chroma_utils import vectorstore
-retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+from chroma_utils import get_vectorstore
+retriever = get_vectorstore().as_retriever(search_kwargs={"k": 2})
 
 output_parser = StrOutputParser()
 

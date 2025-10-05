@@ -45,3 +45,15 @@ variable "app_image_tag" {
   type        = string
   default     = "latest"
 }
+
+variable "api_cpu" {
+  description = "CPU units for API task (e.g., '256', '512', '1024')"
+  type        = string
+  default     = "256"
+}
+
+variable "api_memory" {
+  description = "Memory (MiB) for API task (e.g., '512','1024','2048')"
+  type        = string
+  default     = "1024"
+}
