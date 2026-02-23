@@ -2,15 +2,10 @@ from pydantic import BaseModel, Field
 from enum import Enum
 from datetime import datetime
 
-class ModelName(str, Enum):
-    MOONSHOT_V1_8K = "moonshot-v1-8k"
-    MOONSHOT_V1_32K = "moonshot-v1-32k"
-    MOONSHOT_V1_128K = "moonshot-v1-128k"
-
 class QueryInput(BaseModel):
     question: str
     session_id: str = Field(default=None)
-    model: ModelName = Field(default=ModelName.MOONSHOT_V1_8K)
+    model: str = Field(default="moonshot-v1-8k")
 
 class QueryResponse(BaseModel):
     answer: str

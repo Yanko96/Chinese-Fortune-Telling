@@ -47,11 +47,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(root_path=API_ROOT_PATH, lifespan=lifespan)
 
 # Enums and Models
-class ModelName(str, Enum):
-    MOONSHOT_V1_8K = "moonshot-v1-8k"
-    MOONSHOT_V1_32K = "moonshot-v1-32k"
-    MOONSHOT_V1_128K = "moonshot-v1-128k"
-
 class QueryType(str, Enum):
     GENERAL = "general"
     BAZI = "bazi"
@@ -60,7 +55,7 @@ class QueryType(str, Enum):
 class FortuneInput(BaseModel):
     question: str
     session_id: Optional[str] = Field(default=None)
-    model: ModelName = Field(default=ModelName.MOONSHOT_V1_8K)
+    model: str = Field(default="moonshot-v1-8k")
     query_type: QueryType = Field(default=QueryType.GENERAL)
     birth_date: Optional[str] = Field(default=None)  # Format: YYYY-MM-DD HH:MM
     birth_gender: Optional[str] = Field(default=None)  # "male" or "female"
@@ -69,7 +64,7 @@ class FortuneInput(BaseModel):
 class FortuneResponse(BaseModel):
     answer: str
     session_id: str
-    model: ModelName
+    model: str
     query_type: QueryType
 
 # Utility function to validate birth date
