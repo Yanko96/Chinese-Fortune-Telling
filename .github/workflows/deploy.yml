@@ -78,3 +78,17 @@ jobs:
         if: steps.tfplan.outcome == 'success'
         working-directory: terraform/environments/production
         run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Show deployment URLs
+        if: steps.tfplan.outcome == 'success'
+        working-directory: terraform/environments/production
+        run: |
+          ALB_DNS=$(terraform output -raw alb_dns_name)
+          echo "### 🚀 Deployment URLs" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| Web App | http://${ALB_DNS} |" >> $GITHUB_STEP_SUMMARY
+          echo "| API     | http://${ALB_DNS}/api |" >> $GITHUB_STEP_SUMMARY
+          echo "| Health  | http://${ALB_DNS}/api/healthz |" >> $GITHUB_STEP_SUMMARY
+          echo ""
+          echo "ALB DNS: $ALB_DNS"
