@@ -231,4 +231,7 @@ fortune_app.log
 .env
 
 # Docker volumes
-**/chroma_db/
+# chroma_db is committed (13 MB) so CI/CD can bake it into the Docker image
+# chroma_db_bge and chroma_db_prop are large dev-only dirs, keep ignored
+**/chroma_db_bge/
+**/chroma_db_prop/
