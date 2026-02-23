@@ -11,12 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Pre-download models at build time so ECS tasks don't hit HuggingFace at runtime
 # all-MiniLM-L6-v2: ~90MB  (embedding model for ChromaDB)
 # bge-reranker-base: ~280MB (cross-encoder for HyDE rerank)
-RUN python -c "
-from sentence_transformers import SentenceTransformer, CrossEncoder
-SentenceTransformer('all-MiniLM-L6-v2')
-CrossEncoder('BAAI/bge-reranker-base')
-print('Models pre-downloaded OK')
-"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2'); print('embedding model OK')"
+RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAAI/bge-reranker-base'); print('reranker model OK')"
 
 COPY api/ .
 # Bake the vectorstore into the image (13 MB) so ECS has data without EFS
