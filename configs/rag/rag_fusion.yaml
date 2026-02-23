@@ -1,0 +1,15 @@
+# configs/rag/rag_fusion.yaml
+# 实验：RAG-Fusion — LLM 生成多个查询变体，向量检索后做 RRF 融合
+# 对模糊、歧义查询效果最好
+
+chroma_dir: ./chroma_db
+
+retrieval:
+  type: rag_fusion
+  k: 5              # 最终保留的文档块数
+  num_queries: 3    # 生成几个查询变体（含原始查询共 4 个）
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

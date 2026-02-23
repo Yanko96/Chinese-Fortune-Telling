@@ -1,0 +1,13 @@
+# configs/rag/baseline.yaml
+# 基线：纯向量检索 k=3，无重排，与现有生产配置完全一致
+
+chroma_dir: ./chroma_db
+
+retrieval:
+  type: vector      # 纯向量相似度检索
+  k: 3              # 返回 top-3 文档块
+
+generation:
+  provider: kimi                  # kimi | gemini | groq | deepseek
+  model: moonshot-v1-32k
+  temperature: 0.7

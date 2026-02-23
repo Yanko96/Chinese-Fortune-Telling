@@ -1,0 +1,24 @@
+[
+  {
+    "config": "hybrid",
+    "num_samples": 22,
+    "latency_p50": 7.375,
+    "latency_p95": 10.743,
+    "latency_mean": 7.655,
+    "faithfulness": 0.9493,
+    "answer_relevancy": 0.5604,
+    "context_recall": 0.8769,
+    "context_precision": 0.9638
+  },
+  {
+    "config": "hybrid_rerank_bge",
+    "num_samples": 22,
+    "latency_p50": 14.153,
+    "latency_p95": 15.094,
+    "latency_mean": 13.986,
+    "faithfulness": 0.9639,
+    "answer_relevancy": 0.5553,
+    "context_recall": 0.8419,
+    "context_precision": 0.9924
+  }
+]

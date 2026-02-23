@@ -1,0 +1,19 @@
+# v5c: HyDE（多假设文档）+ BGE精排
+# 生成 2 条不同角度的假设古籍片段 → 各搜 k=12 → 并集去重约 20-24 候选 → BGE 精排 top_n=5
+# 预期：context_recall 提升（多角度假设文档覆盖更多相关块），precision 保持高位（BGE 守门）
+
+chroma_dir: ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: hyde_rerank
+  k: 12               # 每条假设文档各搜 12 个候选（2 条合并后约 20-24 去重）
+  top_n: 5
+  num_hypothetical: 2  # 生成 2 条假设文档（覆盖不同角度/术语）
+  hyde_model: moonshot-v1-8k
+  rerank_model: BAAI/bge-reranker-base
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

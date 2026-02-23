@@ -60,8 +60,8 @@ module "ecs" {
   api_memory                       = var.api_memory
   api_environment_variables = [
     {
-      name  = "GOOGLE_API_KEY"
-      value = var.google_api_key
+      name  = "MOONSHOT_API_KEY"
+      value = var.moonshot_api_key
     },
     {
       name  = "API_ROOT_PATH"

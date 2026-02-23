@@ -18,7 +18,7 @@ from db_utils import insert_application_logs, get_chat_history, create_applicati
 from fortune_langchain_utils import get_fortune_chain
 
 import os
-os.environ["GOOGLE_API_KEY"] = os.environ.get("GOOGLE_API_KEY", "")
+os.environ["MOONSHOT_API_KEY"] = os.environ.get("MOONSHOT_API_KEY", "")
 
 # Set up logging
 # Configure logging to both file and stdout (so CloudWatch captures logs)

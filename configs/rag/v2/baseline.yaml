@@ -1,0 +1,15 @@
+# configs/rag/v2/baseline.yaml
+# v2 索引：语义分块 + BAAI/bge-small-zh-v1.5 嵌入
+# 检索策略：纯向量 k=3
+
+chroma_dir: ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: vector
+  k: 3
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

@@ -71,7 +71,7 @@ jobs:
             -input=false \
             -var "api_image_tag=$IMAGE_TAG" \
             -var "app_image_tag=$IMAGE_TAG" \
-            -var "google_api_key=${{ secrets.GOOGLE_API_KEY }}" \
+            -var "moonshot_api_key=${{ secrets.MOONSHOT_API_KEY }}" \
             -out tfplan
 
       - name: Terraform Apply

@@ -1,0 +1,15 @@
+# configs/rag/hybrid.yaml
+# 实验：BM25 + 向量 EnsembleRetriever
+# 对古典汉语文本效果通常优于纯向量（字面精确匹配更重要）
+
+chroma_dir: ./chroma_db
+
+retrieval:
+  type: hybrid
+  k: 5              # 每个子检索器各返回 k 个结果，融合后取 top-5
+  bm25_weight: 0.4  # BM25 权重；向量权重 = 1 - bm25_weight = 0.6
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

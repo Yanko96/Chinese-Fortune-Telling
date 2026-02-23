@@ -1,0 +1,21 @@
+# configs/rag/hybrid_rerank_bge.yaml
+# 实验：hybrid_rerank 但换用中文 BGE reranker
+#
+# 问题根因：ms-marco cross-encoder（英文）无法理解古汉语，
+#          反而打乱了 EnsembleRetriever 已经合理的 RRF 排序。
+# 修复：BAAI/bge-reranker-base 专门在中文语料上训练，
+#      能真正提升而非破坏 hybrid 的召回质量。
+
+chroma_dir: ./chroma_db
+
+retrieval:
+  type: hybrid_rerank
+  k: 6
+  bm25_weight: 0.4
+  top_n: 3
+  rerank_model: BAAI/bge-reranker-base
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

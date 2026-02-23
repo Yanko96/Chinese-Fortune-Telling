@@ -1,0 +1,24 @@
+[
+  {
+    "config": "hyde",
+    "num_samples": 22,
+    "latency_p50": 11.123,
+    "latency_p95": 13.98,
+    "latency_mean": 11.069,
+    "faithfulness": 0.9563,
+    "answer_relevancy": 0.527,
+    "context_recall": 0.8682,
+    "context_precision": 0.9173
+  },
+  {
+    "config": "hyde_rerank_bge",
+    "num_samples": 22,
+    "latency_p50": 18.586,
+    "latency_p95": 22.111,
+    "latency_mean": 18.929,
+    "faithfulness": 0.9959,
+    "answer_relevancy": 0.5293,
+    "context_recall": 0.8939,
+    "context_precision": 0.985
+  }
+]

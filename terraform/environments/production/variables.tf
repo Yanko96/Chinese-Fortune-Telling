@@ -28,8 +28,8 @@ variable "availability_zones" {
   default     = ["us-east-1a", "us-east-1b"]
 }
 
-variable "google_api_key" {
-  description = "Google API Key for Gemini"
+variable "moonshot_api_key" {
+  description = "Moonshot AI (Kimi) API Key"
   type        = string
   sensitive   = true
 }

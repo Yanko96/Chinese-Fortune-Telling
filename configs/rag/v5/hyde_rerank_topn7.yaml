@@ -1,0 +1,21 @@
+# v5d: HyDE + BGE精排，宽上下文版本（top_n=7）
+# 对比 v5/hyde_rerank_bge（top_n=5）：返回更多候选块给 LLM
+# 动机：context_recall 瓶颈在于部分问题的相关文本横跨多个块，
+#       多返回 2 个块（7 vs 5）可增加 LLM 能利用的上下文覆盖范围
+# 预期：context_recall +0.02~0.04，faithfulness 可能略降但空间充裕
+
+chroma_dir: ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: hyde_rerank
+  k: 15               # 宽召回候选数（不变）
+  top_n: 7            # 精排后返回 7 块（vs v5 的 5 块）
+  num_hypothetical: 1
+  hyde_model: moonshot-v1-8k
+  rerank_model: BAAI/bge-reranker-base
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

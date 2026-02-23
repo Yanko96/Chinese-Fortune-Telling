@@ -1,0 +1,35 @@
+[
+  {
+    "config": "baseline",
+    "num_samples": 50,
+    "latency_p50": 6.5,
+    "latency_p95": 8.89,
+    "latency_mean": 6.663,
+    "faithfulness": 0.9184,
+    "answer_relevancy": 0.7316,
+    "context_recall": 0.5381,
+    "context_precision": 0.8283
+  },
+  {
+    "config": "hybrid",
+    "num_samples": 50,
+    "latency_p50": 6.527,
+    "latency_p95": 8.417,
+    "latency_mean": 6.623,
+    "faithfulness": 0.9473,
+    "answer_relevancy": 0.6967,
+    "context_recall": 0.7704,
+    "context_precision": 0.792
+  },
+  {
+    "config": "rerank",
+    "num_samples": 50,
+    "latency_p50": 8.522,
+    "latency_p95": 10.243,
+    "latency_mean": 8.284,
+    "faithfulness": 0.9418,
+    "answer_relevancy": 0.6663,
+    "context_recall": 0.6989,
+    "context_precision": 0.8721
+  }
+]
