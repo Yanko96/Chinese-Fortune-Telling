@@ -55,5 +55,5 @@ variable "api_cpu" {
 variable "api_memory" {
   description = "Memory (MiB) for API task (e.g., '512','1024','2048')"
   type        = string
-  default     = "1024"
+  default     = "2048"
 }
