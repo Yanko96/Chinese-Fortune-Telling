@@ -12,11 +12,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # all-MiniLM-L6-v2: ~90MB  (embedding model for ChromaDB)
 # bge-reranker-base: ~280MB (cross-encoder for HyDE rerank)
 RUN python -c "
-from sentence_transformers import SentenceTransformer
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 SentenceTransformer('all-MiniLM-L6-v2')
-AutoTokenizer.from_pretrained('BAAI/bge-reranker-base')
-AutoModelForSequenceClassification.from_pretrained('BAAI/bge-reranker-base')
+CrossEncoder('BAAI/bge-reranker-base')
 print('Models pre-downloaded OK')
 "
 
