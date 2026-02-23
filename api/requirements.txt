@@ -5,9 +5,9 @@ langchain-core
 langchain_community
 langchain-huggingface
 langchain-text-splitters
+langchain_chroma
 docx2txt
 pypdf
-langchain_chroma
 python-multipart
 streamlit>=1.33
 streamlit-chat
