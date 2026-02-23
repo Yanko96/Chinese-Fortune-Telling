@@ -1,0 +1,36 @@
+# Large data directories not needed in API image
+chroma_db_bge/
+chroma_db_prop/
+benchmarks/
+scripts/
+data/
+app/
+terraform/
+fortune_books/
+
+# Git & CI
+.git/
+.github/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Dev environment
+.venv/
+venv/
+.env
+
+# Benchmark / dev artifacts
+*.pkl
+*.jsonl
+bench_crash_log.txt
+bench_debug.txt
+propositions_cache.jsonl
+configs/

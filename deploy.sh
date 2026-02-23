@@ -22,7 +22,7 @@ aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --
 
 # 构建并推送 Docker 镜像
 echo "构建并推送 API 镜像..."
-docker build -t $API_REPO_URL:latest ./api
+docker build -t $API_REPO_URL:latest -f api/Dockerfile .
 docker push $API_REPO_URL:latest
 
 echo "构建并推送 App 镜像..."
