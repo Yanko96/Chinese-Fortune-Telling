@@ -12,8 +12,9 @@ import logging
 import sys
 import re
 from datetime import datetime
+from contextlib import asynccontextmanager
 
-from db_utils import insert_application_logs, get_chat_history
+from db_utils import insert_application_logs, get_chat_history, create_application_logs, create_document_store
 from fortune_langchain_utils import get_fortune_chain
 
 import os
@@ -34,7 +35,16 @@ logging.basicConfig(
 # Configure via env: API_ROOT_PATH=/api
 API_ROOT_PATH = os.getenv("API_ROOT_PATH", "")
 DEBUG_MODE = os.getenv("DEBUG", "false").lower() in ("1", "true", "yes")
-app = FastAPI(root_path=API_ROOT_PATH)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize SQLite tables on startup
+    create_application_logs()
+    create_document_store()
+    logging.info("Database tables initialized.")
+    yield
+
+app = FastAPI(root_path=API_ROOT_PATH, lifespan=lifespan)
 
 # Enums and Models
 class ModelName(str, Enum):

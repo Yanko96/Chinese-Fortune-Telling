@@ -42,7 +42,7 @@ jobs:
           IMAGE_TAG: ${{ steps.vars.outputs.IMAGE_TAG }}
           API_REPO: ${{ steps.vars.outputs.API_REPO }}
         run: |
-          docker build -t "$ECR_REGISTRY/$API_REPO:$IMAGE_TAG" -f api/Dockerfile api
+          docker build -t "$ECR_REGISTRY/$API_REPO:$IMAGE_TAG" -f api/Dockerfile .
           docker push "$ECR_REGISTRY/$API_REPO:$IMAGE_TAG"
 
       - name: Build and push App image

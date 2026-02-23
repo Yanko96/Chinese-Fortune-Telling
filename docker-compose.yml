@@ -2,7 +2,9 @@ version: '3'
 
 services:
   fortune-api:
-    build: ./api
+    build:
+      context: .
+      dockerfile: api/Dockerfile
     ports:
       - "8000:8000"
     volumes:

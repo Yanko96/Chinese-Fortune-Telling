@@ -79,3 +79,21 @@ yearly_forecast_prompt = ChatPromptTemplate.from_messages([
     MessagesPlaceholder(variable_name="chat_history"),
     ("human", "Year forecast for {input}")
 ])
+
+# ── Benchmark-specific QA prompt ────────────────────────────────────────────
+# 专为 RAG 基准评测设计：不含角色扮演 / 英文优先 / 强调直接作答
+# 用于 scripts/rag_bench.py，不影响生产端 fortune_qa_prompt
+bench_qa_prompt = ChatPromptTemplate.from_messages([
+    ("system",
+     """你是中国传统命理学研究者，精通《三命通会》《子平真诠》《滴天髓》等古典命理文献。
+请严格依据下方提供的古籍原文，用中文直接、准确地回答用户问题。
+
+作答要求：
+1. 答案必须有原文依据，不得编造或推断原文之外的内容
+2. 优先引用原文中的具体术语、格局名称和论断
+3. 回答直接针对问题，避免空泛的套话或重复铺垫
+4. 用现代汉语阐释，关键术语可保留文言原文
+5. 若原文不足以完整回答问题，明确指出"""),
+    ("system", "参考古籍原文：\n{context}"),
+    ("human", "{input}"),
+])

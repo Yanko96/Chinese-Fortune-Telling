@@ -2,10 +2,15 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+# Build context is repo root; copy only what the API needs
+COPY api/requirements.txt .
+# Install CPU-only torch first to avoid pulling 2GB CUDA libraries
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY api/ .
+# Bake the vectorstore into the image (13 MB) so ECS has data without EFS
+COPY chroma_db /app/chroma_db
 
 # Set a default root path to work with ALB path-based routing; can be overridden at deploy time
 ENV API_ROOT_PATH="/api"
