@@ -1,0 +1,22 @@
+# v5: HyDE + BGE 交叉编码器精排
+# 组合两种互补优势：
+#   HyDE   → 生成"古籍风格假设片段"，用其向量宽召回（解决现代汉语/古文词汇鸿沟）
+#   BGE精排 → 用原始问题对候选文档逐一打分（精确过滤假设文档引入的噪声）
+#
+# 预期效果：faithfulness/ctx_prec 保持 v4/hyde 高水平，延迟略增（+2~3s 用于 BGE 推理）
+
+chroma_dir: ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: hyde_rerank
+  k: 15               # HyDE 宽召回候选数
+  top_n: 5            # BGE 精排后保留数
+  num_hypothetical: 1 # 假设文档数量（1 条足够，增多提升召回但拖慢速度）
+  hyde_model: moonshot-v1-8k
+  rerank_model: BAAI/bge-reranker-base
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

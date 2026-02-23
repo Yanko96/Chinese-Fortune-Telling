@@ -1,0 +1,19 @@
+# v5b: HyDE + BGE精排，宽召回版本（k=20）
+# 对比 v5/hyde_rerank_bge（k=15）：增加候选文档数，提升 context_recall
+# BGE 仍精排 top_n=5，precision 不应显著下降
+
+chroma_dir: ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: hyde_rerank
+  k: 20               # 宽召回：20 个候选（比 v5 多 5 个）
+  top_n: 5            # BGE 精排后保留数
+  num_hypothetical: 1
+  hyde_model: moonshot-v1-8k
+  rerank_model: BAAI/bge-reranker-base
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

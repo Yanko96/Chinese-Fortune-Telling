@@ -1,0 +1,19 @@
+# configs/rag/v2/hybrid_rerank_bge.yaml
+# v2 索引：语义分块 + BAAI/bge-small-zh-v1.5 嵌入
+# 检索策略：BM25 + 向量混合宽召回 → BGE 精排
+# 目标：结合 hybrid 高召回 + bge-reranker 高精度
+
+chroma_dir: ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: hybrid_rerank
+  k: 6                               # 每路各取 k 个候选
+  bm25_weight: 0.4
+  top_n: 3                           # 精排后保留
+  rerank_model: BAAI/bge-reranker-base
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

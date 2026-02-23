@@ -1,0 +1,28 @@
+# configs/rag/v3/prop_hybrid.yaml
+# 命题索引 — BM25（原始块）+ 命题向量 → 手动 RRF 合并
+#
+# 检索层：
+#   路径 1: BM25 在原始块上字面匹配（古汉语字面字符很重要）
+#   路径 2: 命题向量语义匹配 → 映射回父块
+#   两路 RRF 融合，再取 top 5
+# 生成层：返回父块原文（完整上下文）
+#
+# 期望效果：
+#   vs prop_vector：ctx_recall ↑（BM25 补足语义向量漏掉的字面精确匹配）
+#   vs v2 hybrid：ctx_precision ↑（命题粒度更精准）
+
+chroma_dir:      ./chroma_db_bge      # 主索引（BM25 + prop_hybrid 共用）
+prop_chroma_dir: ./chroma_db_prop     # 命题索引（向量检索使用）
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: prop_hybrid
+  k:             5    # BM25 检索 k 个原始块
+  top_k_props:   15   # 命题向量检索 15 条命题
+  top_k_parents: 5    # RRF 融合后返回的父块数
+  bm25_weight:   0.4  # 仅用于注释说明权重意图；实际由 RRF 分数决定
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

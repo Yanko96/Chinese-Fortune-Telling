@@ -1,7 +1,5 @@
 langchain
 langchain-classic
-langchain-google-genai
-google-ai-generativelanguage>=0.6.16
 langchain-openai
 langchain-core
 langchain_community

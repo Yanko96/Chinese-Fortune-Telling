@@ -1,0 +1,18 @@
+# configs/rag/v4/hyde.yaml
+# HyDE (Hypothetical Document Embedding) — 纯向量路
+#
+# 问题 → moonshot-v1-8k 生成"古籍风格假设文档" → bge-small-zh 向量检索
+# 解决现代汉语问法与古典文言文词汇之间的 embedding gap
+
+chroma_dir:      ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: hyde
+  k: 5                   # 假设文档向量检索 top-k
+  num_hypothetical: 1    # 生成几条假设文档（1 条速度最快）
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

@@ -1,0 +1,20 @@
+# configs/rag/v4/hyde_hybrid.yaml
+# HyDE + BM25 混合检索 → RRF
+#
+# 路径 1: BM25 原始问题字面匹配（古汉字面精确匹配能力强）
+# 路径 2: HyDE 假设文档向量检索（弥补现代问法 vs 古典文体的 gap）
+# 两路 RRF 融合，取 top-5
+
+chroma_dir:      ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: hyde_hybrid
+  k: 5
+  bm25_weight: 0.4       # 注释用；实际权重由 RRF 分数决定
+  num_hypothetical: 1
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

@@ -1,0 +1,24 @@
+# configs/rag/v3/prop_vector.yaml
+# 命题索引 — 纯向量检索
+#
+# 检索层：在命题索引（chroma_db_prop/）中搜索 15 条最相关命题
+# 生成层：将命题对应的父块原文（存于 metadata["parent_chunk"]）传给 LLM
+#
+# 期望效果：
+#   vs v2 hybrid：ctx_precision ↑（命题粒度细 → 更精准命中）
+#                 ctx_recall 持平或略降（只取 5 个父块）
+#                 faithfulness 持平（父块原文与 v2 一样完整）
+
+chroma_dir:      ./chroma_db_bge      # 主索引（BM25 使用；prop_hybrid 复用）
+prop_chroma_dir: ./chroma_db_prop     # 命题索引（向量检索使用）
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: prop_vector
+  top_k_props:   15   # 搜索命题数
+  top_k_parents: 5    # 去重后返回的父块数
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

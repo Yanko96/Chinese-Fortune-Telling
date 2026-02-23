@@ -3,7 +3,7 @@
 LangChain utilities specialized for the Chinese Fortune Teller application.
 """
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_classic.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
@@ -21,7 +21,7 @@ from fortune_prompts import (
 retriever = get_vectorstore().as_retriever(search_kwargs={"k": 3})
 output_parser = StrOutputParser()
 
-def get_fortune_chain(query_type="general", model="gemini-2.5-flash"):
+def get_fortune_chain(query_type="general", model="moonshot-v1-8k"):
     """
     Creates a specialized RAG chain for fortune telling.
     
@@ -35,12 +35,12 @@ def get_fortune_chain(query_type="general", model="gemini-2.5-flash"):
     Returns:
         A retrieval chain configured for the specified query type
     """
-    # Initialize the LLM
-    llm = ChatGoogleGenerativeAI(
+    # Initialize the LLM (Kimi / Moonshot AI — OpenAI-compatible endpoint)
+    llm = ChatOpenAI(
         model=model,
-        temperature=0.7,  # Slightly higher temperature for creative fortune telling responses
-        max_tokens=None,
-        timeout=None,
+        openai_api_key=os.environ.get("MOONSHOT_API_KEY", ""),
+        openai_api_base="https://api.moonshot.cn/v1",
+        temperature=0.7,
         max_retries=2,
     )
     

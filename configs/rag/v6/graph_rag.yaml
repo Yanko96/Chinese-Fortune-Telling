@@ -1,0 +1,31 @@
+# configs/rag/v6/graph_rag.yaml
+# Graph RAG：向量宽召回 + 知识图谱跨书邻居扩展 + BGE 精排
+#
+# 检索逻辑：
+#   1. 向量检索 k=10 个 seed chunks
+#   2. 在知识图谱中做 1 跳 BFS，扩展来自其他书籍的邻居（最多 30 个）
+#   3. seed + neighbors 合并后用 BGE-reranker 精排，返回 top_n=7
+#
+# 目标指标（vs best flat RAG baseline chain_score=0.651）：
+#   chain_score   ≥ 0.77     （+0.12）
+#   cross_hit     ≥ 0.85     （hybrid=1.0 参考；hyde_rerank=0.44 对照）
+
+chroma_dir:      ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+# 图谱文件（由 scripts/build_knowledge_graph.py 生成）
+graph_path:        ./data/knowledge_graph.pkl
+chunk_index_path:  ./data/chunk_index.json
+
+retrieval:
+  type:          graph_rag
+  k:             10          # 向量宽召回数量（seed）
+  hop:           1           # 图遍历跳数
+  top_n:         7           # 最终返回文档数（BGE 精排后）
+  max_neighbors: 30          # 每个 seed 最多扩展的邻居数
+  rerank_model:  BAAI/bge-reranker-base
+
+generation:
+  provider:    kimi
+  model:       moonshot-v1-32k
+  temperature: 0.7

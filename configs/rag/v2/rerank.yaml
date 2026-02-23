@@ -1,0 +1,17 @@
+# configs/rag/v2/rerank.yaml
+# v2 索引：语义分块 + BAAI/bge-small-zh-v1.5 嵌入
+# 检索策略：向量宽召回（k=15） + BGE 交叉编码器精排（top_n=3）
+
+chroma_dir: ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: rerank
+  k: 15                             # 向量召回数量
+  top_n: 3                          # 精排后保留数量
+  rerank_model: BAAI/bge-reranker-base   # 中文交叉编码器
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

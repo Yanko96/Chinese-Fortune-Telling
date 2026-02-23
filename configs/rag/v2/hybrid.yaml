@@ -1,0 +1,16 @@
+# configs/rag/v2/hybrid.yaml
+# v2 索引：语义分块 + BAAI/bge-small-zh-v1.5 嵌入
+# 检索策略：BM25 + 向量 EnsembleRetriever（混合检索）
+
+chroma_dir: ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: hybrid
+  k: 5               # 每路各取 k 个，RRF 融合后取 top-5
+  bm25_weight: 0.4   # BM25 权重；向量权重 = 0.6
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

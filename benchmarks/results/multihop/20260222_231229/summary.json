@@ -1,0 +1,22 @@
+[
+  {
+    "config": "graph_rag",
+    "n": 36,
+    "chain_score_mean": 0.6204,
+    "chain_score_min": 0.0,
+    "chain_score_max": 1.0,
+    "hop_ok_rate": 0.6667,
+    "full_ok_rate": 0.1389,
+    "cross_book_hit_rate": 0.6944,
+    "latency_p50": 13.65,
+    "latency_p90": 15.11,
+    "by_required_hops": {
+      "3": 0.6204
+    },
+    "by_book_pair": {
+      "三命通会×子平真诠": 0.6667,
+      "三命通会×滴天髓": 0.6111,
+      "滴天髓×子平真诠": 0.5833
+    }
+  }
+]

@@ -13,7 +13,7 @@ services:
     environment:
       - API_ROOT_PATH=/api
       - DEBUG=true
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
     healthcheck:
       test: ["CMD", "python", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/healthz').getcode()==200 else 1)"]
       interval: 5s

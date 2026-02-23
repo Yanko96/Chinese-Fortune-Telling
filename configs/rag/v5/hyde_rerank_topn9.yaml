@@ -1,0 +1,19 @@
+# v5e: HyDE + BGE精排，top_n=9 — 探索 recall/precision 权衡曲线
+# 对比 v5d/hyde_rerank_topn7（top_n=7, recall=0.939, prec=0.949）
+# 预期：recall 继续小幅提升，但边际递减；若 faithfulness < 0.97 则 7 是最优点
+
+chroma_dir: ./chroma_db_bge
+embedding_model: BAAI/bge-small-zh-v1.5
+
+retrieval:
+  type: hyde_rerank
+  k: 15
+  top_n: 9
+  num_hypothetical: 1
+  hyde_model: moonshot-v1-8k
+  rerank_model: BAAI/bge-reranker-base
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

@@ -1,0 +1,13 @@
+# configs/rag/top_k.yaml
+# 实验：增大 k，检索更多上下文块（k=8）
+
+chroma_dir: ./chroma_db
+
+retrieval:
+  type: vector
+  k: 8              # 更多候选块，增加 context recall，但也增加噪声
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7

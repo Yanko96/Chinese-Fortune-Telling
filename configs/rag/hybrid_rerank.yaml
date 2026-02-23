@@ -1,0 +1,19 @@
+# configs/rag/hybrid_rerank.yaml
+# 实验：BM25 + 向量混合粗召回，再用交叉编码器精排
+#
+# k=15：给 cross-encoder 提供足够大的候选池（与 rerank 配置一致）
+# 流程：BM25(k=15) + 向量(k=15) → EnsembleRetriever(~15-30候选) → CrossEncoder → top-3
+
+chroma_dir: ./chroma_db
+
+retrieval:
+  type: hybrid_rerank
+  k: 15               # 每个子检索器（BM25/向量）各取 k 个候选，融合后约 k~2k 个不重复文档
+  bm25_weight: 0.4    # BM25 权重；向量权重 = 0.6
+  top_n: 3            # 交叉编码器精排后保留的块数
+  rerank_model: cross-encoder/ms-marco-MiniLM-L-6-v2
+
+generation:
+  provider: kimi
+  model: moonshot-v1-32k
+  temperature: 0.7
