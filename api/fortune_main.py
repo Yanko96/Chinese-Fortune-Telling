@@ -48,8 +48,9 @@ app = FastAPI(root_path=API_ROOT_PATH, lifespan=lifespan)
 
 # Enums and Models
 class ModelName(str, Enum):
-    GEMINI_25_FLASH = "gemini-2.5-flash"
-    GEMINI_20_FLASH = "gemini-2.0-flash"
+    MOONSHOT_V1_8K = "moonshot-v1-8k"
+    MOONSHOT_V1_32K = "moonshot-v1-32k"
+    MOONSHOT_V1_128K = "moonshot-v1-128k"
 
 class QueryType(str, Enum):
     GENERAL = "general"
@@ -59,7 +60,7 @@ class QueryType(str, Enum):
 class FortuneInput(BaseModel):
     question: str
     session_id: Optional[str] = Field(default=None)
-    model: ModelName = Field(default=ModelName.GEMINI_25_FLASH)
+    model: ModelName = Field(default=ModelName.MOONSHOT_V1_8K)
     query_type: QueryType = Field(default=QueryType.GENERAL)
     birth_date: Optional[str] = Field(default=None)  # Format: YYYY-MM-DD HH:MM
     birth_gender: Optional[str] = Field(default=None)  # "male" or "female"
@@ -131,7 +132,6 @@ def get_fortune(fortune_input: FortuneInput):
             # General fortune telling question
             question = fortune_input.question
 
-        # Map non-exp to exp variant for Gemini 2.0 API support
         # Get the appropriate chain
         fortune_chain = get_fortune_chain(
             query_type=fortune_input.query_type.value,
