@@ -96,7 +96,7 @@ def get_fortune(fortune_input: FortuneInput):
         # Log the request
         logging.info(
             f"Session ID: {session_id}, Query Type: {fortune_input.query_type.value}, "
-            f"Question: {fortune_input.question}, Model: {fortune_input.model.value}"
+            f"Question: {fortune_input.question}, Model: {fortune_input.model}"
         )
 
         # Validate inputs for specific query types
@@ -130,7 +130,7 @@ def get_fortune(fortune_input: FortuneInput):
         # Get the appropriate chain
         fortune_chain = get_fortune_chain(
             query_type=fortune_input.query_type.value,
-            model=fortune_input.model.value
+            model=fortune_input.model
         )
 
         # Generate the fortune
@@ -143,7 +143,7 @@ def get_fortune(fortune_input: FortuneInput):
         answer = fortune_result.get('answer', "I cannot see clearly at this moment. Please ask again.")
 
         # Log the response
-        insert_application_logs(session_id, question, answer, fortune_input.model.value)
+        insert_application_logs(session_id, question, answer, fortune_input.model)
         logging.info(f"Session ID: {session_id}, AI Response: {answer[:100]}...")
 
         # Return the response
