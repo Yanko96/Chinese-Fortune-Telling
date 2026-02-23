@@ -49,7 +49,7 @@ variable "app_image_tag" {
 variable "api_cpu" {
   description = "CPU units for API task (e.g., '256', '512', '1024')"
   type        = string
-  default     = "256"
+  default     = "512"
 }
 
 variable "api_memory" {
