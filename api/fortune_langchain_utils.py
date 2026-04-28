@@ -106,7 +106,10 @@ def get_fortune_chain(query_type: str = "general", model: str = "moonshot-v1-8k"
 
     # History-aware retriever: condenses chat history + question into a standalone query,
     # then feeds that into our HyDE+Rerank retriever
-    hyde_rerank_retriever = _build_hyde_rerank_retriever(llm, hyde_k=15, top_n=7)
+    # NOTE: production uses k=8/top_n=5 (not the benchmark winner config k=15/top_n=7)
+    # to keep p95 latency under the 120s ALB idle_timeout on 512 CPU units.
+    # See docs/DEPLOYMENT_NOTES.md §5 for the latency vs quality trade-off.
+    hyde_rerank_retriever = _build_hyde_rerank_retriever(llm, hyde_k=8, top_n=5)
     history_aware_retriever = create_history_aware_retriever(
         llm,
         hyde_rerank_retriever,
