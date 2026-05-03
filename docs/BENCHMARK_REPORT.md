@@ -1,5 +1,68 @@
 # RAG Benchmark Report — 果赖算命阁
 
+> *The body of this report is in Chinese — the language the research was conducted in. The English summary below covers the methodology, headline numbers, and key takeaways.*
+
+---
+
+## English Summary (TL;DR)
+
+A retrieval study over three classical Chinese divination texts (《三命通会》/ 《滴天髓》/ 《子平真诠》, 668 chunks total), evaluating **9 retrieval strategies across 28 configurations** along two task dimensions.
+
+### Evaluation setup
+
+| Item | Value |
+|---|---|
+| Generation LLM | Kimi `moonshot-v1-32k` (temperature 0.7) |
+| Eval judge | **GPT-4o** (not Kimi — Kimi-judging-Kimi was 10–33% more lenient) |
+| Eval embedding (for `answer_relevancy`) | `bge-small-zh-v1.5` (Chinese; English MiniLM undercounts Chinese semantic overlap by ~12.5pp) |
+| Normal benchmark | 22 single-hop questions, RAGAS 4 metrics |
+| Multihop benchmark | 36 cross-book questions, custom `chain_score` (per-step 0 / 0.5 / 1, averaged) |
+
+### Headline results
+
+**Normal (22Q, GPT-4o judge, RAGAS average across 4 metrics)**
+
+| Rank | Config | Faithfulness | Relevancy | Recall | Precision | AVG |
+|:-:|---|:-:|:-:|:-:|:-:|:-:|
+| 1 | **HyDE + Rerank** | **0.917** | 0.651 | 0.829 | 0.850 | **0.812** |
+| 2 | Graph RAG v8 (bge-base) | 0.841 | **0.656** | **0.849** | **0.868** | 0.804 |
+| 3 | Graph RAG v7 (vector_filter=50) | 0.902 | 0.639 | 0.794 | 0.833 | 0.792 |
+| 4 | Hybrid (BM25 + Vector) | 0.762 | 0.668 | 0.846 | 0.885 | 0.790 |
+
+**Multihop (36Q, GPT-4o chain_score)**
+
+| Rank | Config | Chain Score | Hop OK | Full OK | Cross-Book Hit |
+|:-:|---|:-:|:-:|:-:|:-:|
+| 1 | **Graph RAG v7** (vf=50) | **0.729** | 72.2% | **47.2%** | 77.8% |
+| 2 | Graph RAG v8 (bge-base, k=20) | 0.725 | **77.8%** | 44.4% | **91.7%** |
+| – | Pure HyDE (no graph) | 0.593 | 58.3% | 38.9% | 38.9% |
+| – | Hybrid baseline | 0.458 | — | — | — |
+
+### Five key findings
+
+1. **Task-dependent winner.** Pure HyDE wins single-hop (AVG=0.812); Graph RAG dominates multihop (0.729 vs. 0.593). No single method wins both — this is why production uses HyDE+Rerank and Graph RAG remains a documented offline asset.
+2. **Graph RAG solves cross-book reasoning.** `cross_book_hit` rises from 39% (pure HyDE) to 92% (Graph v8 k=20) — IDF-weighted graph expansion successfully bridges concepts across the three classical texts.
+3. **`vector_filter_k` is the key innovation.** Filtering graph neighbors through a top-50 semantic gate achieves the best multihop chain_score (0.729) — topology + semantics > either alone.
+4. **Evaluation methodology matters.** Switching from English eval embedding (`all-MiniLM-L6-v2`) to Chinese (`bge-small-zh-v1.5`) boosted `answer_relevancy` by **+12.5pp**. GPT-4o judging is 10–33% stricter than Kimi self-judging.
+5. **Prompt tuning hits a ceiling fast.** Concise and balanced prompt variants yielded ±2pp — generation quality is bounded by retrieval, not prompting, at this scale.
+
+### Method evolution (Graph RAG, v1 → v8)
+
+```
+v1  flat graph (43K edges)              noisy, low precision
+v2  pruned (min_weight=2, 15K edges)    +3pp
+v3  IDF-weighted + degree pruning       discriminative connections
+v4  reranker upgrade (bge-v2-m3)        marginal gain
+v5  HyDE seed generation                better q↔doc matching
+v6  max_neighbors ablation (30→10)      noise reduction trade-off
+v7  vector_filter_k semantic gate       ★ best multihop (0.729)
+v8  bge-base-zh (768d) + k=15           ★ best normal-graph (0.804)
+```
+
+Full method evolution, ablation analysis, per-question breakdowns, evaluator-bias deep-dive, and prompt-tuning sweep are documented in the Chinese body below.
+
+---
+
 ## 目录
 
 1. [项目概况](#1-项目概况)
