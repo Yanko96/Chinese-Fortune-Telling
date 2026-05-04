@@ -6,10 +6,15 @@ _embedding_function = None
 _vectorstore = None
 
 def get_embedding_function():
+    """Lazy-load the embedding model. Must match the model the index was
+    built with — bge-small-zh-v1.5 for the Chinese divination corpus.
+    Was previously defaulted to all-MiniLM-L6-v2 (English) — a config drift
+    bug that meant prod was searching Chinese text with English embeddings.
+    """
     global _embedding_function
     if _embedding_function is None:
         from langchain_huggingface import HuggingFaceEmbeddings
-        model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5")
         _embedding_function = HuggingFaceEmbeddings(model_name=model_name)
     return _embedding_function
 
@@ -17,7 +22,7 @@ def get_vectorstore():
     global _vectorstore
     if _vectorstore is None:
         from langchain_chroma import Chroma
-        persist_dir = os.getenv("CHROMA_DIR", "./chroma_db")
+        persist_dir = os.getenv("CHROMA_DIR", "./chroma_db_bge")
         _vectorstore = Chroma(persist_directory=persist_dir, embedding_function=get_embedding_function())
     return _vectorstore
 

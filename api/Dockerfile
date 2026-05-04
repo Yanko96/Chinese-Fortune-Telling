@@ -8,18 +8,31 @@ COPY api/requirements.txt .
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download models at build time so ECS tasks don't hit HuggingFace at runtime
-# all-MiniLM-L6-v2: ~90MB  (embedding model for ChromaDB)
-# bge-reranker-base: ~280MB (cross-encoder for HyDE rerank)
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2'); print('embedding model OK')"
+# Pre-download models at build time so ECS tasks don't hit HuggingFace at runtime.
+# Two separate RUN lines so each model gets its own docker layer cache entry —
+# a single multiline `python -c "..."` was getting silently truncated by the
+# build shell, so the second model never downloaded (see DEPLOYMENT_NOTES sec.4).
+#   bge-small-zh-v1.5: ~100MB (embedding for the Chinese corpus index)
+#   bge-reranker-base: ~280MB (cross-encoder for HyDE rerank)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-zh-v1.5'); print('embedding model OK')"
 RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAAI/bge-reranker-base'); print('reranker model OK')"
 
+# Copy source + the PDF corpus, then build the vector index at image build time
+# (replaces the previous approach of committing chroma_db/ — that was 13MB of
+# binary data in the repo just so the image could COPY it). Building from the
+# PDFs makes the image reproducible from source.
 COPY api/ .
-# Bake the vectorstore into the image (13 MB) so ECS has data without EFS
-COPY chroma_db /app/chroma_db
+COPY fortune_books/ /app/fortune_books/
+COPY scripts/build_index_bge.py /app/scripts/build_index_bge.py
+RUN python /app/scripts/build_index_bge.py \
+        --output-dir /app/chroma_db_bge \
+        || (echo "Index build failed" && exit 1)
 
-# Set a default root path to work with ALB path-based routing; can be overridden at deploy time
+# Production retrieval reads from /app/chroma_db_bge via chroma_utils.get_vectorstore()
+ENV CHROMA_DIR=/app/chroma_db_bge
+
+# Default root path to work with ALB path-based routing; overridable at deploy time
 ENV API_ROOT_PATH="/api"
 
-# Use shell form to inject --root-path from env
+# Shell form to inject --root-path from env
 CMD ["/bin/sh", "-c", "uvicorn fortune_main:app --host 0.0.0.0 --port 8000 --root-path ${API_ROOT_PATH}"]

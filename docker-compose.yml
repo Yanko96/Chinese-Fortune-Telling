@@ -9,7 +9,10 @@ services:
       - "8000:8000"
     volumes:
       - ./fortune_books:/app/fortune_books
-      - ./chroma_db:/app/chroma_db
+      # The chroma index is now built inside the image from fortune_books/.
+      # Mount the host's chroma_db_bge/ for live-reload during development;
+      # remove this line if you want to use the image-baked index.
+      - ./chroma_db_bge:/app/chroma_db_bge
     environment:
       - API_ROOT_PATH=/api
       - DEBUG=true
@@ -33,4 +36,4 @@ services:
       - API_URL=http://fortune-api:8000/api
 
 volumes:
-  chroma_db:
+  chroma_db_bge:
