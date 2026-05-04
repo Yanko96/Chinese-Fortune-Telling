@@ -1,19 +1,25 @@
+fastapi
+uvicorn
+python-multipart
+
+# LangChain — production retrieval chain
 langchain
 langchain-classic
 langchain-openai
 langchain-core
-langchain_community
+langchain-community
 langchain-huggingface
+langchain-chroma
 langchain-text-splitters
-langchain_chroma
+
+# Embeddings + reranker
+sentence-transformers
+
+# Document loaders (used by chroma_utils.load_and_split_document)
 docx2txt
 pypdf
-python-multipart
-streamlit>=1.33
-streamlit-chat
-streamlit-extras
+
+# Chinese calendar helpers (used by BaZi date logic in the app, kept here so
+# the API can validate dates server-side too)
 chinese-calendar
 lunardate
-sentence-transformers
-fastapi
-uvicorn
