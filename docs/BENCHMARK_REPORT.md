@@ -61,6 +61,10 @@ v8  bge-base-zh (768d) + k=15           ★ best normal-graph (0.804)
 
 Full method evolution, ablation analysis, per-question breakdowns, evaluator-bias deep-dive, and prompt-tuning sweep are documented in the Chinese body below.
 
+### Production Shadow Eval (Appendix A)
+
+A small 10-pair controlled experiment quantifying the offline-vs-production query rewriting gap: production prepends `"BaZi analysis for someone born on {date}, gender: {sex}. "` to the user's Chinese question, which can pollute the HyDE step. **Result: −0.5 mean retrieval-quality score (3.0 vs. 3.5 on a 1–5 scale; 4 control wins, 5 ties, 1 treatment win)**. Significant but not catastrophic. The proposed fix is to strip the English prefix before HyDE; details and a worked failure case in [Appendix A](#附录-aproduction-shadow-eval).
+
 ---
 
 ## 目录
@@ -500,7 +504,77 @@ v8 (+ bge-base-768d)        → 0.725   更大 embedding 但 vf 更有效
 
 ---
 
-## 附录：文件索引
+## 附录 A：Production Shadow Eval
+
+### 动机
+
+主基准（normal 22Q + multihop 36Q）评的是**纯中文问题**经过完整 HyDE+Rerank 管道后的检索/生成质量。但**生产环境**的 BaZi/Forecast 路径会在用户问题前面**拼接一段英文上下文**（`api/fortune_main.py` L113-125）：
+
+```
+BaZi analysis for someone born on 1990-07-22 14:15, gender: female. {original_question}
+```
+
+这段英文前缀进入 HyDE 提示，会让 LLM 生成的"假设古文段落"漂向"生辰/月令"主题，丢失原问题真正的语义焦点。基准评测覆盖不到这个 gap。
+
+Shadow Eval 是一个小型对照实验，量化这个偏移的大小。
+
+### 实验设置
+
+| 项 | 值 |
+|---|---|
+| 数据集 | `benchmarks/qa_production_shadow.json` — 10 个 BaZi 相关问题 |
+| 控制组 | 原始中文问题（基准用的格式） |
+| 处理组 | `"BaZi analysis for someone born on {date}, gender: {sex}. {question}"`（生产实际发送的格式） |
+| 检索 | 生产配置：HyDE + BGE Rerank, `hyde_k=8, top_n=5` |
+| 判分 | GPT-4o（temperature=0）评 1–5 分相关性。**两组都按原始中文问题打分**，测的是英文前缀对检索"用户真实意图"的伤害 |
+| 复现 | `python scripts/shadow_eval.py` |
+
+### 结果
+
+| 指标 | 值 |
+|---|---|
+| 配对数 | 10 |
+| 控制组均值 | **3.5 / 5** |
+| 处理组均值 | **3.0 / 5** |
+| Δ（处理 − 控制） | **−0.5（相对下降 14%）** |
+| 处理组赢 | 1 / 10 |
+| 平局 | 5 / 10 |
+| 控制组赢 | 4 / 10 |
+
+**结论**：英文 BaZi 前缀在 40% 的查询上明显伤害检索；在 50% 的查询上没有影响；只在 10% 的查询上意外地帮上了忙。**平均退化 0.5 分（14%）**，不致命但显著。
+
+### 典型失败案例
+
+`shadow_02`：「什么是正财格？如何判断一个八字是否构成正财格？」(control=5, treatment=2, **Δ=−3**)
+
+- **控制组 top-1**（5/5）：《三命通会》「○论正财」原文片段
+  > 正财者，乃甲见己、乙见戊之例。受我克制，为我之妻，譬人娶妻，妻赍财嫁我...
+
+- **处理组 top-1**（2/5）：《三命通会》「△辰月」杂气分日干段
+  > 甲乙日生辰月为杂气印，喜见官星及印露... 戊己日为杂气财，喜财露旺...
+
+**根因**：HyDE 提示是「**仿照古典命理文献的风格，写一段 80-150 字的原文片段，直接包含问题答案所涉及的术语和论述**」。当查询前缀里塞了`"born on 1990-07-22"`，HyDE 模型会把"生于辰月（即 4 月）"作为关键信号，生成的假设段落偏向「月令/季节」语义，向量召回因此命中"辰月杂气"段而错过"正财格定义"段。Reranker 对原中文问题打分能挽回部分（少召回到错的 chunk 时 ok），但 HyDE 这一步的污染传播下去了。
+
+### 修复方向（roadmap，未实施）
+
+1. **在 HyDE 前剥离英文前缀**：检测拉丁文头、提取尾部中文问题作为 HyDE 输入，原拼接 query 仅用于最终生成。1 行代码 + 一个正则。
+2. **生产侧切到 Chinese-only 查询**：让前端把生辰/性别作为**结构化字段**（已经是了）传给 prompt 模板，不要拼回 question 里。需要修改 `fortune_main.py` L113-125。
+3. **训练 Chinese-only HyDE 适配器**：长期方向，成本高，可能不值得。
+
+短期最高 ROI 是方案 1。预期能把 Δ 从 −0.5 回收到接近 0。
+
+### 已知 caveat
+
+- 只有 10 对，统计功效有限（这是一个 directional finding，不是 p<0.05 的强证明）
+- GPT-4o 单 judge，没有交叉评分
+- 没有评估生成（answer）质量本身，只评了 retrieval 输入给 generation 的 context 质量
+- BaZi 路径之外还有 Forecast 路径同样问题（同样的英文前缀模式），未在本 eval 中覆盖
+
+完整 per-pair JSON（含每条问题的 5 个检索 chunk）：`benchmarks/results/shadow_eval.json`
+
+---
+
+## 附录 B：文件索引
 
 | 类型 | 路径 |
 |------|------|
