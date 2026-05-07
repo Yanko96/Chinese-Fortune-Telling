@@ -10,10 +10,15 @@ relevance to the *underlying Chinese intent* on a 1-5 scale. Reports the mean
 delta — quantifying how much the English wrapper degrades retrieval quality.
 
 Usage:
+    # Without the prefix-strip fix (measures the raw production gap)
     python scripts/shadow_eval.py \
         --chroma-dir ./chroma_db_bge \
         --dataset benchmarks/qa_production_shadow.json \
         --output benchmarks/results/shadow_eval.json
+
+    # With the prefix-strip fix applied (verifies the fix closes the gap)
+    python scripts/shadow_eval.py --strip-prefix \
+        --output benchmarks/results/shadow_eval_postfix.json
 """
 
 from __future__ import annotations
@@ -38,13 +43,22 @@ if "MOONSHOT_API_KEY" not in os.environ and "KIMI_API_KEY" in os.environ:
     os.environ["MOONSHOT_API_KEY"] = os.environ["KIMI_API_KEY"]
 
 
-def build_retriever(chroma_dir: str, hyde_k: int = 8, top_n: int = 5):
-    """Construct the same HyDE+Rerank retriever the production API uses."""
+def build_retriever(chroma_dir: str, hyde_k: int = 8, top_n: int = 5,
+                    strip_prefix: bool = False):
+    """Construct the same HyDE+Rerank retriever the production API uses.
+
+    If strip_prefix=True, applies _strip_query_prefix (the same function the
+    production retriever uses after the prefix-strip fix) before HyDE and
+    rerank — so this eval reflects what production now does.
+    """
     from langchain_openai import ChatOpenAI
     from langchain_chroma import Chroma
     from langchain_huggingface import HuggingFaceEmbeddings
     from langchain_community.cross_encoders import HuggingFaceCrossEncoder
     from langchain_core.documents import Document
+    # Reuse the production strip regex so the eval can't drift out of sync
+    # with the fix it's measuring.
+    from fortune_langchain_utils import _strip_query_prefix
 
     embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-small-zh-v1.5")
     vectorstore = Chroma(persist_directory=chroma_dir, embedding_function=embeddings)
@@ -66,17 +80,20 @@ def build_retriever(chroma_dir: str, hyde_k: int = 8, top_n: int = 5):
     )
 
     def retrieve(query: str) -> list[Document]:
+        # Apply the same prefix-strip the production retriever applies.
+        q_for_chain = _strip_query_prefix(query) if strip_prefix else query
+
         # Step 1: HyDE
         try:
-            hyp = llm.invoke(HYDE_PROMPT.format(question=query)).content.strip()
+            hyp = llm.invoke(HYDE_PROMPT.format(question=q_for_chain)).content.strip()
         except Exception:
-            hyp = query
+            hyp = q_for_chain
         # Step 2: Wide recall on hypothesis
         candidates = vectorstore.similarity_search(hyp, k=hyde_k)
         if not candidates:
             return []
-        # Step 3: BGE rerank against *original* query
-        pairs = [[query, d.page_content] for d in candidates]
+        # Step 3: BGE rerank against the (possibly stripped) query
+        pairs = [[q_for_chain, d.page_content] for d in candidates]
         scores = encoder.score(pairs)
         ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
         return [d for _, d in ranked[:top_n]]
@@ -124,14 +141,21 @@ def main():
     ap.add_argument("--output", default="benchmarks/results/shadow_eval.json")
     ap.add_argument("--hyde-k", type=int, default=8)
     ap.add_argument("--top-n", type=int, default=5)
+    ap.add_argument(
+        "--strip-prefix", action="store_true",
+        help="Apply the production prefix-strip fix before HyDE+Rerank. "
+             "Use to verify the fix closes the offline-vs-production gap.",
+    )
     args = ap.parse_args()
 
     with open(args.dataset, encoding="utf-8") as f:
         dataset = json.load(f)
     pairs = dataset["pairs"]
-    print(f"Running shadow eval on {len(pairs)} paired queries")
+    print(f"Running shadow eval on {len(pairs)} paired queries"
+          f" (strip_prefix={args.strip_prefix})")
 
-    retrieve = build_retriever(args.chroma_dir, args.hyde_k, args.top_n)
+    retrieve = build_retriever(args.chroma_dir, args.hyde_k, args.top_n,
+                               strip_prefix=args.strip_prefix)
 
     from langchain_openai import ChatOpenAI
     judge = ChatOpenAI(
@@ -208,6 +232,7 @@ def main():
         "control_wins": loss,
         "hyde_k": args.hyde_k,
         "top_n": args.top_n,
+        "strip_prefix": args.strip_prefix,
         "config": "production HyDE+Rerank (k=8, top_n=5), bge-reranker-base",
         "judge": "gpt-4o, temperature=0",
     }

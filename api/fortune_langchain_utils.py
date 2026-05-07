@@ -18,6 +18,7 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.documents import Document
 import logging
 import os
+import re
 
 from chroma_utils import get_vectorstore
 from fortune_prompts import (
@@ -37,6 +38,29 @@ HYDE_PROMPT = (
     "只输出片段本身，不要标题、序号或解释。\n\n"
     "问题：{question}"
 )
+
+# Strip the English wrappers that fortune_main.py adds for BaZi/Forecast paths
+# before they reach HyDE — otherwise the hypothetical-document generation drifts
+# toward birthday/year semantics and misses the canonical classical-text segments
+# the user is actually asking about. See docs/BENCHMARK_REPORT.md Appendix A for
+# the measured impact (−0.5 retrieval score on a 10-pair shadow eval).
+_BAZI_PREFIX_RE = re.compile(
+    r"^BaZi analysis for someone born on [^.]+?, gender: \w+\.\s*",
+    re.IGNORECASE,
+)
+_FORECAST_PREFIX_RE = re.compile(
+    r"^Yearly forecast for \d{4} for [^.]+? with the question:\s*",
+    re.IGNORECASE,
+)
+
+
+def _strip_query_prefix(q: str) -> str:
+    """Remove the English BaZi/Forecast wrapper added by fortune_main.py,
+    returning just the user's Chinese question. Returns q unchanged if no
+    wrapper is detected."""
+    q = _BAZI_PREFIX_RE.sub("", q)
+    q = _FORECAST_PREFIX_RE.sub("", q)
+    return q
 
 # Lazy-loaded BGE cross-encoder (avoid reloading on every request)
 _bge_encoder = None
@@ -60,14 +84,19 @@ def _build_hyde_rerank_retriever(llm, hyde_k: int = 15, top_n: int = 7):
     vectorstore = get_vectorstore()
 
     def _retrieve(query) -> list[Document]:
-        q = query.get("input", "") if isinstance(query, dict) else str(query)
+        q_full = query.get("input", "") if isinstance(query, dict) else str(query)
 
-        # Step 1: HyDE — generate hypothetical passage
+        # Strip the English BaZi/Forecast wrapper before retrieval. The wrapper
+        # is useful in the final generation prompt (gives the LLM the user's
+        # birth context) but pollutes HyDE and the BGE rerank's q↔doc scoring.
+        q_clean = _strip_query_prefix(q_full)
+
+        # Step 1: HyDE — generate hypothetical passage from the Chinese question only
         try:
-            hyp_text = llm.invoke(HYDE_PROMPT.format(question=q)).content.strip()
+            hyp_text = llm.invoke(HYDE_PROMPT.format(question=q_clean)).content.strip()
         except Exception as e:
             logging.warning(f"HyDE generation failed, falling back to raw query: {e}")
-            hyp_text = q
+            hyp_text = q_clean
 
         # Step 2: Wide recall using hypothetical passage embedding
         candidates = vectorstore.similarity_search(hyp_text, k=hyde_k)
@@ -75,9 +104,11 @@ def _build_hyde_rerank_retriever(llm, hyde_k: int = 15, top_n: int = 7):
         if not candidates:
             return []
 
-        # Step 3: BGE cross-encoder rerank using *original* question
+        # Step 3: BGE cross-encoder rerank using the (clean) Chinese question.
+        # Rerank against q_clean — the cross-encoder is comparing semantic match
+        # between query and classical-text chunk, so birthday metadata wouldn't help.
         encoder = _get_bge_encoder()
-        pairs  = [[q, doc.page_content] for doc in candidates]
+        pairs  = [[q_clean, doc.page_content] for doc in candidates]
         scores = encoder.score(pairs)
         ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
         return [doc for _, doc in ranked[:top_n]]
