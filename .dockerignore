@@ -1,12 +1,24 @@
-# Large data directories not needed in API image
-chroma_db_bge/
-chroma_db_prop/
-benchmarks/
-scripts/
-data/
+# API image only needs: api/, fortune_books/ (for build-time index build),
+# and scripts/build_index_bge.py. Everything else is excluded.
+
+# Other top-level directories not needed in the API image
 app/
 terraform/
-fortune_books/
+benchmarks/
+data/
+configs/
+docs/
+tests/
+
+# Vector indexes (rebuilt inside the image from fortune_books/)
+chroma_db/
+chroma_db_bge/
+chroma_db_bge_base/
+chroma_db_prop/
+
+# All scripts except the one the Dockerfile explicitly copies
+scripts/*
+!scripts/build_index_bge.py
 
 # Git & CI
 .git/
@@ -33,4 +45,3 @@ venv/
 bench_crash_log.txt
 bench_debug.txt
 propositions_cache.jsonl
-configs/
