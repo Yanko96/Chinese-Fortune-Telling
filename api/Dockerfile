@@ -24,9 +24,10 @@ RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAA
 COPY api/ .
 COPY fortune_books/ /app/fortune_books/
 COPY scripts/build_index_bge.py /app/scripts/build_index_bge.py
-RUN python /app/scripts/build_index_bge.py \
-        --output-dir /app/chroma_db_bge \
-        || (echo "Index build failed" && exit 1)
+# build_index_bge.py writes to ./chroma_db_bge (relative to CWD), which is
+# /app at this point — i.e. /app/chroma_db_bge, matching the CHROMA_DIR env var
+# set below. The script reads fortune_books/ relative to CWD too.
+RUN python /app/scripts/build_index_bge.py
 
 # Production retrieval reads from /app/chroma_db_bge via chroma_utils.get_vectorstore()
 ENV CHROMA_DIR=/app/chroma_db_bge
