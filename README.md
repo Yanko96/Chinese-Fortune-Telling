@@ -14,24 +14,29 @@ A production-deployed RAG system over three classical Chinese divination texts (
 
 ## Architecture at a Glance
 
+> **Production retrieval = HyDE + BGE Cross-Encoder Rerank** (`k=8 → top_n=5`).
+> Graph RAG was researched in parallel and stays in the repo as an offline asset (better cross-book multihop), but is not wired into the production chain. See [§ Why HyDE+Rerank in production](#1a-hyde--bge-rerank--production) below for the trade-off.
+
 ```mermaid
 flowchart LR
     User([User]) -->|HTTPS| ALB[AWS ALB]
     ALB -->|/| Streamlit[Streamlit App]
     ALB -->|/api/*| API[FastAPI]
     Streamlit -->|REST| API
-    API -->|HyDE → embed → rerank → generate| Pipeline{{HyDE + BGE Rerank}}
+    API -->|HyDE → embed → rerank → generate| Pipeline{{HyDE + BGE Rerank<br/>k=8, top_n=5}}
     Pipeline --> Kimi[Kimi LLM<br/>moonshot-v1-8k]
-    Pipeline --> Chroma[(ChromaDB<br/>666 chunks)]
-    Pipeline --> BGE[BGE Reranker<br/>baked in image]
+    Pipeline --> Chroma[(ChromaDB<br/>671 chunks<br/>bge-small-zh-v1.5)]
+    Pipeline --> BGE[BGE Cross-Encoder<br/>bge-reranker-base<br/>baked in image]
 ```
 
-The production retrieval pipeline (per request):
+Per-request flow (the only path in production):
 
-1. LLM writes a *hypothetical* classical-Chinese passage in answer style — **HyDE**
-2. Embed the hypothetical, similarity-search **k=8** candidates against ChromaDB
-3. BGE cross-encoder re-scores each candidate against the **original** question, keep **top 5**
-4. Stuff top 5 chunks into a role-prompted QA template, generate via Kimi
+1. **HyDE** — Kimi writes an 80–150 char *hypothetical* classical-Chinese passage in the answering style. This gives the dense retriever a query that looks like the corpus, not like a question.
+2. **Wide recall** — embed the hypothetical via `bge-small-zh-v1.5`, similarity-search **k=8** candidates against the ChromaDB index.
+3. **Rerank** — `bge-reranker-base` cross-encoder re-scores each candidate against the **original** user question (not the hypothesis), keep **top 5**. The cross-encoder is lexical-aware where the dense embedding isn't, so it catches matches the wider HyDE recall over-generalized away.
+4. **Generate** — stuff top-5 chunks into the role-played QA prompt (果赖 persona for BaZi/Forecast, evidence-grounded otherwise), generate via Kimi `moonshot-v1-8k`.
+
+The two LLM calls (HyDE + final generation) plus one rerank pass land end-to-end p50 around **22–30 seconds** on a 0.5 vCPU ECS task — see [docs/DEPLOYMENT_NOTES.md §5](docs/DEPLOYMENT_NOTES.md) for the latency budget that drove the `k=15→8 / top_n=7→5` choice.
 
 Full diagram and per-decision rationale → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -49,16 +54,14 @@ cd Chinese-Fortune-Telling
 cp .env.example .env
 # Edit .env: set MOONSHOT_API_KEY=sk-...
 
-# Build vector index from the PDFs in fortune_books/ (one-time, ~3 min)
-python scripts/build_index_bge.py --output-dir ./chroma_db_bge
-
-# Launch the full stack
+# Launch the full stack (Dockerfile builds the vector index from
+# fortune_books/ at image build time — no separate setup step)
 docker-compose up --build
 ```
 
-Open <http://localhost:8501> in a browser.
+Open <http://localhost:8501> in a browser. Health check at <http://localhost:8000/api/healthz>.
 
-For a manual (non-Docker) setup, see [docs/ARCHITECTURE.md §Quick Local Run](docs/ARCHITECTURE.md).
+For a manual (non-Docker) setup, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
@@ -66,7 +69,7 @@ For a manual (non-Docker) setup, see [docs/ARCHITECTURE.md §Quick Local Run](do
 
 ### 1. Retrieval Research
 
-A systematic benchmark comparing **9 retrieval strategies** across two evaluation dimensions, totaling **28 experiment configurations**.
+A systematic benchmark comparing **9 retrieval strategies** across two evaluation dimensions, totaling **28 experiment configurations**. Two methods are documented in depth below: **HyDE + BGE Rerank** (deployed to production) and **Graph RAG** (offline research, multihop winner).
 
 | Dataset | Questions | Scope | Evaluation |
 |---|:-:|---|---|
@@ -75,24 +78,83 @@ A systematic benchmark comparing **9 retrieval strategies** across two evaluatio
 
 **Top results** (highlights — full tables in [BENCHMARK_REPORT.md](docs/BENCHMARK_REPORT.md)):
 
-| Task | Winner | Score | Why it wins |
-|---|---|---|---|
-| Normal (22Q AVG) | **HyDE + Rerank** | **0.812** | Faithfulness 0.917; hypothesis-conditioned retrieval beats keyword/dense alone |
-| Multihop (36Q chain) | **Graph RAG v7** (`vector_filter_k=50`) | **0.729** | Semantic gate on graph neighbors solves cross-book reasoning |
-| Cross-book hit | Graph RAG v8 (k=20) | **91.7%** | IDF-weighted edges bridge concepts across《三命通会》/《滴天髓》/《子平真诠》 |
+| Task | Winner | Score | Why it wins | Status |
+|---|---|---|---|---|
+| Normal (22Q AVG) | **HyDE + Rerank** | **0.812** | Faithfulness 0.917; hypothesis-conditioned retrieval beats keyword/dense alone | ✅ Production |
+| Multihop (36Q chain) | **Graph RAG v7** (`vector_filter_k=50`) | **0.729** | Semantic gate on graph neighbors solves cross-book reasoning | 🔬 Offline only |
+| Cross-book hit | Graph RAG v8 (k=20) | **91.7%** | IDF-weighted edges bridge concepts across《三命通会》/《滴天髓》/《子平真诠》 | 🔬 Offline only |
 
-**Method evolution** (Graph RAG):
+#### 1a. HyDE + BGE Rerank — **production**
+
+The deployed pipeline. Wins single-hop (AVG=0.812, faithfulness=0.917 on 22Q) and remains the highest-faithfulness method across the entire 28-config sweep — important for a system whose users read the answer as authoritative classical exegesis.
+
+**Why HyDE here, specifically?**
+Direct dense retrieval over Chinese classical text has a query↔document distribution gap: the user asks `"什么是正财格？"` in modern Chinese, but the answer chunks are in classical Chinese (`"正财者，乃甲见己、乙见戊之例。受我克制，为我之妻..."`). Embedding the question directly underweights the right chunks. HyDE closes the gap by asking the LLM to **write a classical-Chinese passage in the answering style first**, then embedding *that* — the retrieval seed now lives in the same distribution as the corpus.
 
 ```
-v1  flat graph (43K edges)             noisy, low precision
-v2  pruned (min_weight=2, 15K edges)   +3pp
-v3  IDF-weighted + degree-pruned (5K)  discriminative connections
-v4  reranker upgrade                   marginal
-v5  HyDE seed generation               better q↔doc matching
-v6  max_neighbors ablation (30→10)     noise reduction trade-off
-v7  vector_filter_k (semantic gate)    ★ best multihop (0.729)
-v8  bge-base-zh (768d) + k=15          ★ best normal-graph (0.804)
+Question (modern Chinese)
+  └── HyDE prompt asks Kimi to write 80–150 char classical-style passage
+        └── Embed hypothetical passage with bge-small-zh-v1.5 (384d)
+              └── ChromaDB similarity search → 8 candidate chunks (wide recall)
+                    └── BGE Cross-Encoder rerank against ORIGINAL question
+                          └── Top 5 chunks → role-played QA prompt → Kimi answer
 ```
+
+**Why rerank, on top of HyDE?**
+HyDE expands recall but introduces noise — the LLM-written hypothetical sometimes drifts. The BGE cross-encoder is a different model class (not a dual-encoder); it scores `(query, chunk)` pairs **jointly**, which catches lexical/keyword matches that the dense step's bag-of-meaning embedding smooths over. The two errors are negatively correlated: HyDE-only loses on precision when hypothesis drifts; Rerank-only loses on recall when the surface form of the question doesn't match the canonical text. Stacked, faithfulness jumps from 0.755 (Hybrid+Rerank) to **0.917** (HyDE+Rerank).
+
+**Ablation summary (full table in BENCHMARK_REPORT):**
+
+| Config | Faithfulness | Relevancy | Recall | Precision | AVG |
+|---|:-:|:-:|:-:|:-:|:-:|
+| **HyDE + Rerank** (production) | **0.917** | 0.651 | 0.829 | 0.850 | **0.812** |
+| Graph RAG v8 (bge-base, k=15) | 0.841 | 0.656 | 0.849 | 0.868 | 0.804 |
+| Hybrid (BM25 + Vector) | 0.762 | 0.668 | 0.846 | 0.885 | 0.790 |
+| Hybrid + BGE Rerank | 0.755 | 0.664 | 0.720 | 0.894 | 0.758 |
+| Proposition (Vector) | 0.492 | 0.667 | 0.567 | 0.719 | 0.611 |
+
+**Production-specific design notes:**
+
+| Knob | Value | Why |
+|---|---|---|
+| `hyde_k` (wide recall) | 8 | Benchmark winner is k=15, but `k=8` is the p95 latency line for a 0.5 vCPU ECS task with 120s ALB timeout. Faithfulness loss vs k=15 is <2pp; latency improvement is 70s→30s. See [DEPLOYMENT_NOTES §5](docs/DEPLOYMENT_NOTES.md). |
+| `top_n` (after rerank) | 5 | Reduced from 7 alongside `hyde_k` cut. Generation prompt fits comfortably under 32k context. |
+| HyDE prompt language | 文言文 (classical Chinese) | Critical — modern Chinese hypotheticals match poorly with the corpus's classical phrasing. The prompt explicitly says "仿照古典命理文献的风格". |
+| Rerank scoring text | original Chinese question | Reranking against the HyDE hypothetical would compound HyDE's noise. The cross-encoder is meant to **counter** the HyDE drift, not amplify it. |
+| Prefix-strip before HyDE | regex strip of `"BaZi analysis for..."` wrapper | Production's BaZi/Forecast paths prepend an English query rewriter to the user's Chinese question, which polluted HyDE. Shadow eval measured −0.5 retrieval quality; the fix recovers most of it. Code at `api/fortune_langchain_utils.py:_strip_query_prefix`, tests at `tests/test_query_prefix_strip.py`. |
+
+Code: [`api/fortune_langchain_utils.py`](api/fortune_langchain_utils.py) (130 lines, no abstractions — `_build_hyde_rerank_retriever` is the whole thing).
+
+#### 1b. Graph RAG — offline research, multihop winner
+
+Built in parallel to HyDE+Rerank as a research arm specifically targeting **cross-book reasoning** (e.g., "compare the treatment of 正官 in 《滴天髓》 vs 《子平真诠》" — a question that touches 2+ books). Wins multihop (`chain_score=0.729`, cross-book hit 92%) but loses to HyDE+Rerank on single-hop, and adds enough latency to disqualify it from production at current scale.
+
+**The key insight (v7):** combining graph topology with vector semantics beats either alone. Pure-vector retrieval misses the cross-book bridges (different classical texts use different terms for the same concept); pure-graph BFS expansion is noisy (high-degree concept nodes drown the signal). Adding `vector_filter_k` — gate graph neighbors through a top-50 vector recall whitelist — kept the topology benefit while preserving precision.
+
+**8-version method evolution:**
+
+```
+v1  flat graph (min_weight=1, 43K edges)        → noisy, low precision baseline
+v2  pruned (min_weight=2, 15K edges)            → +3pp from removing weak co-occurrences
+v3  IDF-weighted edges + degree pruning (5K)    → discriminative connections, rare-term bridges weighted up
+v4  reranker upgrade (bge-v2-m3) + top_n=10     → marginal: retrieval ceiling, not rerank ceiling
+v5  HyDE-seeded graph entry                     → better q↔doc match at the seed node
+v6  max_neighbors ablation (30→10)              → noise/recall trade-off
+v7  vector_filter_k semantic gate               → ★ best multihop (0.729)
+v8  bge-base-zh (768d) + k=15                   → ★ best normal-graph (0.804)
+```
+
+Why it didn't ship to production:
+
+- **Latency**: graph load on cold start + BFS per query adds ~20–30s on a 0.5 vCPU task — pushes p95 close to the 120s ALB ceiling
+- **Single-hop loss**: most production traffic is single-hop ("explain my BaZi"). On those, HyDE+Rerank beats Graph (0.812 vs 0.804)
+- **Operational cost**: graph topology has to stay in sync with the embedding index. Two artifacts to rebuild on corpus change vs. one.
+
+Graph RAG remains a documented offline asset — the natural next iteration when product traffic shifts toward multihop questions or when async/streaming UX absorbs the latency.
+
+**Knowledge graph stats:** 668 nodes (419 三命通会 / 154 滴天髓 / 95 子平真诠), 5,255 IDF-weighted cross-book edges (degree-pruned to ≤15 neighbors per node), 41 bridge terms (官星 / 财星 / 印绶 / 用神 …) connecting concepts across texts. Edge weights 3.0–16.5 — higher = rarer shared term = stronger conceptual bridge. Built via `python scripts/build_knowledge_graph.py --chroma-dir ./chroma_db_bge --min-weight 2`.
+
+Code: [`api/graph_retriever.py`](api/graph_retriever.py) (defined but **not imported by production**; used by `scripts/rag_bench.py` and `scripts/bench_multihop.py` for offline benchmarking).
 
 ### 2. System Design
 
@@ -136,21 +198,6 @@ Two non-trivial methodology choices, each measurably moving the leaderboard:
 | **Chinese eval embedding** (bge-small-zh-v1.5, not `all-MiniLM-L6-v2`) | Used for `answer_relevancy` cosine similarity | Boosted answer_relevancy by **+12.5pp** — English embeddings undercount Chinese semantic overlap |
 
 Custom `chain_score` metric for multihop: each reasoning step scored 0 / 0.5 / 1 against the gold answer, then averaged across all hops in the chain. See [BENCHMARK_REPORT.md §7](docs/BENCHMARK_REPORT.md) for the rubric and inter-annotator-style calibration runs.
-
----
-
-## Knowledge Graph (offline; powers Graph RAG)
-
-- **668 nodes** — 419 from 《三命通会》, 154 from 《滴天髓》, 95 from 《子平真诠》
-- **5,255 IDF-weighted edges** — cross-book only, degree-pruned to ≤15 neighbors per node
-- **41 bridge terms** — 官星 / 财星 / 印绶 / 用神 etc., connecting concepts across the three texts
-- Edge-weight range 3.0–16.5 (higher weight = rarer shared term = stronger connection)
-
-Built via:
-
-```bash
-python scripts/build_knowledge_graph.py --chroma-dir ./chroma_db_bge --min-weight 2
-```
 
 ---
 
