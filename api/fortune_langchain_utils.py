@@ -136,14 +136,26 @@ def get_fortune_chain(query_type: str = "general", model: str = "moonshot-v1-8k"
     )
 
     # History-aware retriever: condenses chat history + question into a standalone query,
-    # then feeds that into our HyDE+Rerank retriever
+    # then feeds that into our routed retriever.
     # NOTE: production uses k=8/top_n=5 (not the benchmark winner config k=15/top_n=7)
     # to keep p95 latency under the 120s ALB idle_timeout on 512 CPU units.
     # See docs/DEPLOYMENT_NOTES.md §5 for the latency vs quality trade-off.
     hyde_rerank_retriever = _build_hyde_rerank_retriever(llm, hyde_k=8, top_n=5)
+
+    # Multi-strategy router: defaults to HyDE+Rerank (production winner on
+    # single-hop), routes only high-confidence multihop queries to Graph RAG v7
+    # (multihop chain_score=0.729 vs HyDE 0.593). See api/retriever_router.py
+    # for the policy and README §1c. for the rationale.
+    from retriever_router import build_routed_retriever
+    routed_retriever = build_routed_retriever(
+        llm=llm,
+        hyde_retriever=hyde_rerank_retriever,
+        vectorstore=get_vectorstore(),
+    )
+
     history_aware_retriever = create_history_aware_retriever(
         llm,
-        hyde_rerank_retriever,
+        routed_retriever,
         fortune_contextualize_prompt
     )
 

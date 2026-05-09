@@ -24,6 +24,8 @@ RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAA
 COPY api/ .
 COPY fortune_books/ /app/fortune_books/
 COPY scripts/build_index_bge.py /app/scripts/build_index_bge.py
+# Knowledge graph artifacts (~1.6MB) for the Graph RAG path in the router.
+COPY data/ /app/data/
 # build_index_bge.py writes to ./chroma_db_bge (relative to CWD), which is
 # /app at this point — i.e. /app/chroma_db_bge, matching the CHROMA_DIR env var
 # set below. The script reads fortune_books/ relative to CWD too.

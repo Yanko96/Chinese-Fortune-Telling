@@ -5,10 +5,11 @@
 app/
 terraform/
 benchmarks/
-data/
 configs/
 docs/
 tests/
+# data/ IS needed: holds knowledge_graph.pkl + chunk_index.json which the
+# router lazy-loads for the Graph RAG path. ~1.6MB total.
 
 # Vector indexes (rebuilt inside the image from fortune_books/)
 chroma_db/
