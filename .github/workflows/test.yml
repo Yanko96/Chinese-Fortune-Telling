@@ -25,7 +25,11 @@ jobs:
           python -m pip install --upgrade pip
           # Production runtime deps the tests need to import
           pip install fastapi langchain-core langchain-openai langchain-classic langchain-community
-          # Test-only deps
+          # Top-level deps used by argparse CLIs in scripts/ (needed for the
+          # bench_dryrun --help smoke tests, since top-level imports run
+          # before argparse processes --help)
+          pip install pyyaml python-dotenv
+          # Test-only deps (pytest, httpx, networkx)
           pip install -r tests/requirements.txt
 
       - name: Run pytest
