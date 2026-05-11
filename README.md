@@ -275,6 +275,41 @@ python scripts/rescore_normal_gpt4o.py      # normal
 
 ---
 
+## Roadmap
+
+Concrete next iterations, in rough priority order based on user-facing value vs. implementation cost. Each line cross-references the code or doc it would touch.
+
+### Retrieval / Router
+
+- **No-RAG fast path** — extend the router (`api/retriever_router.py`) with a third branch that skips both HyDE and Graph for queries that don't need classical-text grounding: greetings (`你好` / `hi`), meta questions about the system (`你能做什么`), and ultra-short inputs (<5 Chinese chars, no bridge terms). Saves ~2 LLM calls + retrieval per non-substantive query. Detection logic is ~10 lines; the harder part is verifying we don't accidentally skip a real divination question.
+- **Learned router** — replace the heuristic in `should_route_to_graph()` with a tiny logistic-regression classifier over the same features + sentence-transformer query embeddings, trained on ~50 hand-labeled queries (HyDE-best / Graph-best / no-RAG). Worth doing once we have routing-accuracy telemetry from production.
+- **Larger Shadow Eval rerun** — current 10-pair sample is too small to isolate the `_strip_query_prefix` fix's contribution from HyDE's `temperature=0.7` noise. A 50-pair eval with `temperature=0` HyDE would give a p<0.05 confirmation. Script ready (`scripts/shadow_eval.py`), just needs labeling time.
+
+### Conversation / Memory
+
+- **Persistent session memory** — current sessions are SQLite-backed but live in a container-local file, so they don't survive an ECS task replacement. Move chat history to a managed store (DynamoDB or RDS Postgres) so a user's conversation persists across deploys + replicas. Schema is straightforward; the design work is in choosing the eviction policy (TTL? size cap? both?).
+- **Long-term per-user memory** — beyond the current session, store a per-user profile (birthday, zodiac, previously discussed concerns) so follow-up readings can reference past context without re-asking. Requires auth (currently anonymous `session_id` cookie) — see "Auth" below.
+- **Multi-turn reasoning quality eval** — RAGAS metrics measure single-turn quality. Add a multi-turn benchmark where each follow-up question must coherently reference earlier context (~20 conversation chains, hand-curated, evaluated by GPT-4o on consistency).
+
+### Internationalization
+
+- **English-language UI + answers** — production currently mixes English UI strings with English-only LLM answers (even though questions can be Chinese). A proper i18n setup would (a) translate the role-played persona prompt to English so English answers feel native rather than translated, (b) add a per-session language toggle, (c) extend retrieval to also handle English questions (probably via query-language detection + translated HyDE hypothetical).
+- **Other Chinese dialects + traditional characters** — the corpus is mixed simplified/traditional; the bridge-term vocabulary is normalized to simplified. A traditional-Chinese user typing `七殺` instead of `七煞` currently misses the multi-entity detector. Normalization at query time is a 5-line fix.
+
+### Reliability / Ops
+
+- **Upstream-error retry budget + circuit breaker** — current 429→503 fix (see [DEPLOYMENT_NOTES](docs/DEPLOYMENT_NOTES.md)) maps the error but doesn't actively manage retry storms. Add a token bucket per upstream LLM + circuit breaker that opens after N consecutive 429s and degrades to a cached "system busy" response. Important once traffic > one-user-at-a-time.
+- **Production telemetry → routing tuning loop** — log every router decision + downstream RAGAS-style auto-eval on the generated answer. Aggregate to a CloudWatch dashboard showing per-route quality + latency. Use this to re-tune router thresholds monthly.
+- **Auth + rate-limit per user** — anonymous sessions today; an upstream rate-limit incident affects everyone. A simple Cognito + per-user rate-limit at the ALB would isolate noisy users.
+
+### Cost / Performance
+
+- **Streaming responses for the generation step** — the rerank step is the current latency dominator, but once rerank is cached (next item), streaming the final LLM answer would cut perceived latency by ~10s.
+- **Reranker cache** — for high-traffic repeated queries, cache `(query_hash, top_n_chunk_ids)` so we skip the 6-pair rerank entirely on cache hit. Redis or in-memory LRU.
+- **Smaller production model for HyDE** — HyDE generation only needs to write a 150-char classical-Chinese sentence. A smaller / cheaper Kimi model (`moonshot-v1-8k`) is already what's used; could go further to a fine-tuned 7B model hosted ourselves, cutting per-query Kimi cost ~60% if traffic justifies the inference infra.
+
+---
+
 ## Tech Stack
 
 | Layer | Choice |
