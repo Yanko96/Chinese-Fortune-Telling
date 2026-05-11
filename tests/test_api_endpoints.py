@@ -130,3 +130,80 @@ def test_arbitrary_model_string_is_accepted(client):
         "model": "gemini-2.5-flash",  # legacy value from a stale client
     })
     assert r.status_code == 200, "permissive str validation must accept legacy values"
+
+
+# ── Upstream-error mapping (Kimi 429 / overloaded / timeout) ──────────────
+
+def _chain_that_raises(exc):
+    """Helper: fortune chain that raises exc on .invoke()."""
+    class _Boom:
+        def invoke(self, _inputs):
+            raise exc
+    return _Boom()
+
+
+def test_kimi_429_maps_to_503(tmp_path, monkeypatch):
+    """Kimi 429 / 'engine_overloaded_error' must return HTTP 503 (not 500),
+    so callers can distinguish upstream busy from server failure and retry
+    with backoff. Regression for the prod incident on 2026-05-10."""
+    monkeypatch.chdir(tmp_path)
+    import sys
+    for mod in ("fortune_main", "fortune_langchain_utils", "db_utils", "chroma_utils"):
+        sys.modules.pop(mod, None)
+    import fortune_main
+    from fastapi.testclient import TestClient
+
+    # Mimic the actual error string Kimi returns when overloaded
+    boom = _chain_that_raises(
+        Exception("Error code: 429 - {'error': {'message': "
+                  "'The engine is currently overloaded, please try again later', "
+                  "'type': 'engine_overloaded_error'}}")
+    )
+    monkeypatch.setattr(fortune_main, "get_fortune_chain", lambda **kw: boom)
+    client = TestClient(fortune_main.app)
+
+    r = client.post("/fortune", json={
+        "question": "test", "query_type": "general", "model": "moonshot-v1-8k",
+    })
+    assert r.status_code == 503, f"expected 503, got {r.status_code}: {r.text}"
+    body = r.json()
+    assert "overloaded" in body["detail"].lower() or "拥堵" in body["detail"]
+
+
+def test_kimi_timeout_maps_to_504(tmp_path, monkeypatch):
+    """Upstream connection/timeout errors map to HTTP 504 Gateway Timeout."""
+    monkeypatch.chdir(tmp_path)
+    import sys
+    for mod in ("fortune_main", "fortune_langchain_utils", "db_utils", "chroma_utils"):
+        sys.modules.pop(mod, None)
+    import fortune_main
+    from fastapi.testclient import TestClient
+
+    boom = _chain_that_raises(Exception("Connection error: read timed out after 90s"))
+    monkeypatch.setattr(fortune_main, "get_fortune_chain", lambda **kw: boom)
+    client = TestClient(fortune_main.app)
+
+    r = client.post("/fortune", json={
+        "question": "test", "query_type": "general", "model": "moonshot-v1-8k",
+    })
+    assert r.status_code == 504
+
+
+def test_unexpected_error_still_maps_to_500(tmp_path, monkeypatch):
+    """Errors that aren't recognized 429/timeout patterns still get the
+    generic 500 — we don't want to hide bugs behind a misleading 503."""
+    monkeypatch.chdir(tmp_path)
+    import sys
+    for mod in ("fortune_main", "fortune_langchain_utils", "db_utils", "chroma_utils"):
+        sys.modules.pop(mod, None)
+    import fortune_main
+    from fastapi.testclient import TestClient
+
+    boom = _chain_that_raises(ValueError("totally unrelated app bug"))
+    monkeypatch.setattr(fortune_main, "get_fortune_chain", lambda **kw: boom)
+    client = TestClient(fortune_main.app)
+
+    r = client.post("/fortune", json={
+        "question": "test", "query_type": "general", "model": "moonshot-v1-8k",
+    })
+    assert r.status_code == 500

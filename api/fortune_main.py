@@ -157,6 +157,30 @@ def get_fortune(fortune_input: FortuneInput):
         # Propagate HTTP exceptions as-is
         raise
     except Exception as e:
+        msg = str(e).lower()
+        # Map upstream LLM rate-limit / overload (Kimi 429 + Moonshot's
+        # 'engine_overloaded_error') to 503 so clients can distinguish
+        # 'we're broken' from 'upstream is busy, retry shortly'.
+        # langchain-openai already retries 2x internally via ChatOpenAI's
+        # max_retries=2 — by the time we see the exception, retries are
+        # exhausted, so falling further back at this layer is the right
+        # signal to the caller.
+        if any(kw in msg for kw in ("429", "rate limit", "overloaded", "engine_overloaded")):
+            logging.warning(f"Upstream LLM rate-limited/overloaded: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "LLM 上游暂时拥堵，请几秒后重试。"
+                    "(Upstream LLM is temporarily overloaded — please retry.)"
+                ),
+            )
+        # Connection / timeout errors → 504 Gateway Timeout
+        if any(kw in msg for kw in ("connection error", "timeout", "timed out")):
+            logging.warning(f"Upstream LLM connection issue: {e}")
+            raise HTTPException(
+                status_code=504,
+                detail="Upstream LLM service unreachable or slow. Please retry shortly.",
+            )
         logging.exception("Unhandled exception in /fortune")
         # Only expose internal details when DEBUG is explicitly enabled
         if DEBUG_MODE:
