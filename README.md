@@ -160,31 +160,36 @@ Code: [`api/graph_retriever.py`](api/graph_retriever.py). **Wired into productio
 
 Neither method dominates the full query distribution: HyDE wins single-hop, Graph wins multihop. Rather than picking one globally, a lightweight heuristic router classifies each incoming query and dispatches to the better strategy.
 
-**Policy (conservative, defaults to HyDE):**
+**Policy — three branches, evaluated in order**:
 
 ```python
-def should_route_to_graph(query: str) -> bool:
-    if distinct_book_mentions(query) >= 2:        # 《X》《Y》对比
-        return True
-    if bridge_terms(query) >= 2 and has_compare_keyword(query):
-        return True
-    return False  # HyDE — the production-safe single-hop winner
+def _route(query):
+    if should_skip_rag(query):           # greetings / meta / thanks -> empty docs
+        return []                        # save HyDE call + vector search + rerank
+    if should_route_to_graph(query):     # cross-book / multi-entity+compare
+        return graph_retriever.invoke(query)
+    return hyde_retriever.invoke(query)  # default — production stable winner
 ```
 
-**Three independent detectors** (each unit-tested in `tests/test_retriever_router.py`):
+Order matters: skip-RAG is checked first because it short-circuits ALL retrieval (cheapest exit). Then Graph, then HyDE. The default is HyDE — the production-safe single-hop winner.
 
-| Detector | Method | False-positive guard |
+**Detectors** (each unit-tested in `tests/test_retriever_router.py`):
+
+| Detector | Triggers | False-positive guard |
 |---|---|---|
-| `detect_cross_book` | Regex over `《...》` Chinese book quote marks | Distinct count (same book quoted 5× still counts 1) |
-| `has_compare_signal` | Keyword regex: 对比 / 区别 / 异同 / 差异 / vs / 相较 / 哪个更 …  | Excludes "比较好" / "比较一下" filler matches |
-| `detect_multi_entity` | Hits against the 35 bridge-terms vocabulary the knowledge graph was built on | Reusing the curated vocab means high precision for free — no NER model needed |
+| `should_skip_rag` | `^(你好\|hi\|hello\|...)$` — greetings · `^(你是谁\|你能做什么\|介绍.*自己\|...)$` — meta · `^(谢谢\|再见\|thanks\|bye\|...)$` — thanks/farewell | All patterns `^…$` anchored, so "你好，请问什么是正财格？" still falls through to retrieval |
+| `detect_cross_book` | `《X》` regex, distinct count ≥ 2 | Same book quoted 5× still counts as 1 |
+| `has_compare_signal` | Keywords: 对比 / 区别 / 异同 / 差异 / vs / 相较 / 哪个更 … | Excludes "比较好" / "比较一下" filler matches |
+| `detect_multi_entity` | Hits against the 35 bridge-terms vocabulary the knowledge graph was built on | Reusing the curated vocab gives high precision for free — no NER model needed |
 
-**Why conservative?** HyDE is the single-hop benchmark winner AND faster on a 0.5 vCPU task (~30 s vs Graph's ~15 s ... wait, the multihop is *faster* because graph hits land sooner). Setting both 2-book and 2-entity+compare thresholds means routing only fires on high-confidence cases. Worst case = identical to pre-router production (always HyDE).
+**Why conservative routing?** HyDE is the single-hop benchmark winner AND the highest-faithfulness method. Setting both 2-book and 2-entity+compare thresholds for Graph means it only fires on high-confidence multihop. Worst case = identical to pre-router production (always HyDE).
 
 **Verified live**:
 
 | Query | Decision | Reason logged | Latency |
 |---|---|---|---|
+| `你好` | **skip_rag** | `greeting` | **~5 s** (-80% vs HyDE) |
+| `你能做什么？` | **skip_rag** | `meta_question` | ~6 s |
 | `什么是正财格？` | **HyDE** | `default_hyde (cross_book=0, multi_entity=1, compare=False)` | ~30 s |
 | `《滴天髓》和《子平真诠》对正官的论述有何不同？` | **Graph** | `cross_book_mentions=2` | ~15 s |
 
@@ -281,8 +286,8 @@ Concrete next iterations, in rough priority order based on user-facing value vs.
 
 ### Retrieval / Router
 
-- **No-RAG fast path** — extend the router (`api/retriever_router.py`) with a third branch that skips both HyDE and Graph for queries that don't need classical-text grounding: greetings (`你好` / `hi`), meta questions about the system (`你能做什么`), and ultra-short inputs (<5 Chinese chars, no bridge terms). Saves ~2 LLM calls + retrieval per non-substantive query. Detection logic is ~10 lines; the harder part is verifying we don't accidentally skip a real divination question.
-- **Learned router** — replace the heuristic in `should_route_to_graph()` with a tiny logistic-regression classifier over the same features + sentence-transformer query embeddings, trained on ~50 hand-labeled queries (HyDE-best / Graph-best / no-RAG). Worth doing once we have routing-accuracy telemetry from production.
+- **Learned router** — replace the heuristic in `should_route_to_graph()` / `should_skip_rag()` with a tiny logistic-regression classifier over the same features + sentence-transformer query embeddings, trained on ~50 hand-labeled queries (HyDE-best / Graph-best / no-RAG). Worth doing once we have routing-accuracy telemetry from production.
+- **Expand skip-RAG patterns from production logs** — the current patterns are designed by inspection. Mining a week of production queries for high-frequency conversational utterances that *should* have been skipped (but weren't matched) would surface real-world phrasings we missed.
 - **Larger Shadow Eval rerun** — current 10-pair sample is too small to isolate the `_strip_query_prefix` fix's contribution from HyDE's `temperature=0.7` noise. A 50-pair eval with `temperature=0` HyDE would give a p<0.05 confirmation. Script ready (`scripts/shadow_eval.py`), just needs labeling time.
 
 ### Conversation / Memory
