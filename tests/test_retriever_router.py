@@ -18,6 +18,7 @@ from retriever_router import (  # noqa: E402  (sys.path patched by conftest)
     detect_multi_entity,
     has_compare_signal,
     should_route_to_graph,
+    should_skip_rag,
     _get_bridge_terms,
 )
 
@@ -188,6 +189,67 @@ def test_route_to_graph_for_production_multihop_bazi():
     route, reason = should_route_to_graph(q)
     assert route is True
     assert "cross_book" in reason
+
+
+# ── should_skip_rag (no-RAG fast path) ────────────────────────────────────
+
+@pytest.mark.parametrize(
+    "q,expected_reason",
+    [
+        ("你好", "greeting"),
+        ("您好", "greeting"),
+        ("你好！", "greeting"),
+        ("你好。", "greeting"),
+        ("早上好", "greeting"),
+        ("晚安", "greeting"),
+        ("hi", "greeting"),
+        ("Hello!", "greeting"),
+        ("hey", "greeting"),
+        ("Good morning", "greeting"),
+        ("你是谁？", "meta_question"),
+        ("你能做什么？", "meta_question"),
+        ("介绍一下你自己", "meta_question"),
+        ("自我介绍一下", "meta_question"),
+        ("Who are you?", "meta_question"),
+        ("What can you do?", "meta_question"),
+        ("谢谢", "thanks_or_farewell"),
+        ("谢谢！", "thanks_or_farewell"),
+        ("感谢", "thanks_or_farewell"),
+        ("再见", "thanks_or_farewell"),
+        ("bye", "thanks_or_farewell"),
+        ("thanks", "thanks_or_farewell"),
+    ],
+)
+def test_skip_rag_positive(q, expected_reason):
+    skip, reason = should_skip_rag(q)
+    assert skip is True, f"should skip RAG for {q!r}"
+    assert reason == expected_reason
+
+
+@pytest.mark.parametrize(
+    "q",
+    [
+        "什么是正财格？",                          # real question
+        "你好，请问什么是正财格？",                # greeting + real question
+        "我命中带什么？",                          # real divination ask
+        "正官和偏官的区别？",                      # multihop question (should go to graph, not skip)
+        "今年运势如何",                            # real forecast ask
+        "Hi, what is BaZi?",                       # greeting + real question
+        "你能算一下我的命吗？",                    # contains 你能 but full sentence — real ask
+        "你介绍一下正财格",                        # contains 介绍 but for a topic, not self-intro
+    ],
+)
+def test_skip_rag_negative(q):
+    skip, _ = should_skip_rag(q)
+    assert skip is False, f"should NOT skip RAG for {q!r}"
+
+
+def test_skip_rag_does_not_misfire_on_real_question_after_greeting():
+    """A query like '你好，请问什么是正财格？' must still go through retrieval.
+    Anchored ^...$ patterns ensure greeting tokens at the start of a longer
+    sentence don't trigger skip-RAG."""
+    skip, _ = should_skip_rag("你好，请问什么是正财格？")
+    assert skip is False
 
 
 # ── Reason strings are useful for observability ──────────────────────────

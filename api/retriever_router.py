@@ -37,6 +37,80 @@ from langchain_core.runnables import RunnableLambda
 
 # ── Routing detectors ─────────────────────────────────────────────────────
 
+# ── No-RAG fast-path detectors ─────────────────────────────────────────
+#
+# These patterns identify queries that don't need any classical-text
+# retrieval — pure conversational/meta turns. Routing them to a no-RAG
+# branch saves one HyDE LLM call + one vector search + one rerank pass
+# (~3–6s on a 0.5 vCPU task) and the answer quality is identical because
+# the LLM's persona prompt already covers greetings/meta naturally.
+#
+# Each pattern is anchored (^...$) so partial matches like
+# "你好，请问什么是正财格？" still fall through to retrieval.
+
+GREETING_PATTERN = re.compile(
+    r"^\s*(你好|您好|早上?好|下午好|晚上?好|早安|午安|晚安|嗨|"
+    r"hi|hello|hey|good\s+(morning|afternoon|evening|night))"
+    r"[!！?？.。~～\s]*$",
+    re.IGNORECASE,
+)
+
+META_PATTERN = re.compile(
+    r"^\s*("
+    # Chinese identity / capability questions
+    r"你是谁|你叫什么|你叫啥|你是什么|"
+    r"你能做什么|你会做什么|你能干(嘛|什么)|你会干(嘛|什么)|"
+    # Chinese self-introduction asks — 你自己 must come BEFORE 自己 in the
+    # alternation so the regex prefers the longer match
+    r"介绍(一?下)?(你自己|自己|你)|"
+    r"自我介绍(一?下)?|"
+    # English equivalents
+    r"who\s+are\s+you|what\s+(can|do)\s+you\s+do|"
+    r"tell\s+me\s+about\s+yourself|introduce\s+yourself"
+    r")"
+    r"[?？.。\s]*$",
+    re.IGNORECASE,
+)
+
+THANKS_FAREWELL_PATTERN = re.compile(
+    r"^\s*(谢谢|多谢|感谢|"
+    r"再见|拜拜|"
+    r"thanks?|thank\s+you|"
+    r"bye|goodbye|good\s+bye|see\s+you)"
+    r"[!！?？.。~～\s]*$",
+    re.IGNORECASE,
+)
+
+
+def should_skip_rag(query: str) -> tuple[bool, str]:
+    """Detect queries that don't need classical-text retrieval at all.
+
+    Returns (should_skip, reason). Reason is logged for observability.
+
+    Triggers on three anchored patterns:
+      - GREETING_PATTERN: 你好 / hi / hello / 早安 / ...
+      - META_PATTERN: 你是谁 / 你能做什么 / who are you / ...
+      - THANKS_FAREWELL_PATTERN: 谢谢 / thanks / 再见 / bye / ...
+
+    All patterns require ^...$ anchors so that "你好，正财格是什么？"
+    (greeting + real question) still falls through to RAG.
+
+    On a skip-RAG decision, the chain feeds an empty context to the
+    final generation prompt — the LLM still answers using its persona
+    prompt and chat history, but doesn't waste cycles fetching
+    classical text that the response won't use anyway.
+    """
+    if GREETING_PATTERN.match(query):
+        return True, "greeting"
+    if META_PATTERN.match(query):
+        return True, "meta_question"
+    if THANKS_FAREWELL_PATTERN.match(query):
+        return True, "thanks_or_farewell"
+    return False, ""
+
+
+# ── Multihop-routing detectors ────────────────────────────────────────────
+
 # Classical-text book quote marks 《...》 — unambiguous in this domain
 BOOK_PATTERN = re.compile(r"《([^》]+)》")
 
@@ -235,15 +309,21 @@ def build_routed_retriever(llm, hyde_retriever, vectorstore):
         q_full = inp.get("input", "") if isinstance(inp, dict) else str(inp)
         q_clean = _strip_query_prefix(q_full)
 
-        route_to_graph, reason = should_route_to_graph(q_clean)
-        logging.info(
-            f"[router] decision={'graph' if route_to_graph else 'hyde'}: {reason}"
-        )
+        # 1. Skip-RAG fast path — greetings / meta / thanks shouldn't waste
+        # a HyDE LLM call + vector search + rerank pass. Return empty docs;
+        # the downstream generation prompt + persona handles the response.
+        skip, skip_reason = should_skip_rag(q_clean)
+        if skip:
+            logging.info(f"[router] decision=skip_rag: {skip_reason}")
+            return []
 
+        # 2. Multihop / cross-book queries → Graph RAG v7
+        route_to_graph, graph_reason = should_route_to_graph(q_clean)
         if route_to_graph:
             gr = _ensure_graph_retriever()
             if gr is not None:
                 try:
+                    logging.info(f"[router] decision=graph: {graph_reason}")
                     # GraphRetriever's BaseRetriever interface takes a string
                     return gr.invoke(q_clean)
                 except Exception as e:
@@ -254,8 +334,9 @@ def build_routed_retriever(llm, hyde_retriever, vectorstore):
             # If we get here: graph state missing OR graph call errored.
             # Fall through to HyDE.
 
-        # Default / fallback path. HyDE retriever does its own prefix strip
+        # 3. Default / fallback path. HyDE retriever does its own prefix strip
         # internally — pass the original dict so chat_history is preserved.
+        logging.info(f"[router] decision=hyde: {graph_reason}")
         return hyde_retriever.invoke(inp)
 
     return RunnableLambda(_route)
