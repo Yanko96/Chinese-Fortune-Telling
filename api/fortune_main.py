@@ -99,37 +99,58 @@ def get_fortune(fortune_input: FortuneInput):
             f"Question: {fortune_input.question}, Model: {fortune_input.model}"
         )
 
-        # Validate inputs for specific query types
-        if fortune_input.query_type == QueryType.BAZI and not validate_birth_date(fortune_input.birth_date):
-            raise HTTPException(
-                status_code=400,
-                detail="Valid birth date (YYYY-MM-DD HH:MM) is required for BaZi analysis"
-            )
-
         # Get chat history
         chat_history = get_chat_history(session_id)
 
-        # Process input based on query type
-        if fortune_input.query_type == QueryType.BAZI:
-            # For BaZi analysis, we add birth date to the question
-            question = (
-                f"BaZi analysis for someone born on {fortune_input.birth_date}, "
-                f"gender: {fortune_input.birth_gender or 'not specified'}. {fortune_input.question}"
-            )
-        elif fortune_input.query_type == QueryType.FORECAST:
-            # For yearly forecast
-            current_year = datetime.now().year
-            question = (
-                f"Yearly forecast for {current_year} for {fortune_input.zodiac_sign or 'a person'} "
-                f"with the question: {fortune_input.question}"
+        # ── Effective query_type resolution ────────────────────────────────
+        # When the user sets a birthday in the sidebar, the frontend sends
+        # query_type=bazi on every subsequent request — including chitchat
+        # ("你好", "你能做什么"). The router's skip_rag branch correctly
+        # avoids retrieval for those, but the BaZi-specialized prompt would
+        # still force the LLM into "calculate Year Pillar / Day Master / ..."
+        # mode. Detected this during self-testing — a greeting came back as
+        # a full BaZi reading instead of a hello.
+        #
+        # Fix: mirror the router's skip_rag check at this layer. If the user
+        # is just chatting, downgrade to GENERAL so the generic persona prompt
+        # answers — the chain's retriever will also independently land on
+        # skip_rag, so the LLM call doesn't fetch context either way.
+        from retriever_router import should_skip_rag  # type: ignore
+        skip, skip_reason = should_skip_rag(fortune_input.question)
+
+        if skip:
+            effective_query_type = QueryType.GENERAL
+            question = fortune_input.question  # no English wrapper for chitchat
+            logging.info(
+                f"[api] effective_query_type=GENERAL (was {fortune_input.query_type.value}) "
+                f"— skip_rag={skip_reason}"
             )
         else:
-            # General fortune telling question
-            question = fortune_input.question
+            effective_query_type = fortune_input.query_type
+            if fortune_input.query_type == QueryType.BAZI:
+                # Real BaZi request — validate birth_date here, not earlier,
+                # so chitchat with query_type=bazi but no birth_date still works
+                if not validate_birth_date(fortune_input.birth_date):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Valid birth date (YYYY-MM-DD HH:MM) is required for BaZi analysis"
+                    )
+                question = (
+                    f"BaZi analysis for someone born on {fortune_input.birth_date}, "
+                    f"gender: {fortune_input.birth_gender or 'not specified'}. {fortune_input.question}"
+                )
+            elif fortune_input.query_type == QueryType.FORECAST:
+                current_year = datetime.now().year
+                question = (
+                    f"Yearly forecast for {current_year} for {fortune_input.zodiac_sign or 'a person'} "
+                    f"with the question: {fortune_input.question}"
+                )
+            else:
+                question = fortune_input.question
 
-        # Get the appropriate chain
+        # Get the appropriate chain using the effective (post-override) type
         fortune_chain = get_fortune_chain(
-            query_type=fortune_input.query_type.value,
+            query_type=effective_query_type.value,
             model=fortune_input.model
         )
 
@@ -146,12 +167,15 @@ def get_fortune(fortune_input: FortuneInput):
         insert_application_logs(session_id, question, answer, fortune_input.model)
         logging.info(f"Session ID: {session_id}, AI Response: {answer[:100]}...")
 
-        # Return the response
+        # Return the response. We surface the effective_query_type (not the
+        # frontend-sent one) so clients can detect the skip_rag downgrade and
+        # render accordingly — e.g. a Streamlit panel that says "BaZi reading"
+        # should hide itself when the response was actually a chitchat reply.
         return FortuneResponse(
             answer=answer,
             session_id=session_id,
             model=fortune_input.model,
-            query_type=fortune_input.query_type
+            query_type=effective_query_type
         )
     except HTTPException:
         # Propagate HTTP exceptions as-is

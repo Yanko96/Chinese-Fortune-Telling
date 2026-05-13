@@ -189,6 +189,80 @@ def test_kimi_timeout_maps_to_504(tmp_path, monkeypatch):
     assert r.status_code == 504
 
 
+# ── skip_rag overrides query_type (UX guardrail) ─────────────────────────
+
+def test_greeting_with_bazi_query_type_downgrades_to_general(client):
+    """Frontend sets query_type=bazi whenever the user has a birthday in the
+    sidebar — even for chitchat. A '你好' should downgrade to GENERAL so the
+    generic persona prompt answers, not the BaZi-specialized one that would
+    force a four-pillar calculation. UX regression from prod self-test."""
+    r = client.post("/fortune", json={
+        "question": "你好",
+        "query_type": "bazi",
+        "birth_date": "1990-01-01 12:00",
+        "birth_gender": "female",
+        "model": "moonshot-v1-8k",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["query_type"] == "general", (
+        "skip_rag must downgrade query_type so the client knows it wasn't "
+        "actually a BaZi reading"
+    )
+
+
+def test_greeting_with_bazi_query_type_no_birthday_does_not_400(client):
+    """When skip_rag fires, the BaZi birth_date validation must be bypassed
+    — the user typing '你好' without a birthday shouldn't get a validation
+    error just because the frontend defaulted to bazi mode."""
+    r = client.post("/fortune", json={
+        "question": "你好",
+        "query_type": "bazi",
+        # no birth_date intentionally
+        "model": "moonshot-v1-8k",
+    })
+    assert r.status_code == 200, r.text
+
+
+def test_real_bazi_question_still_validates_birthday(client):
+    """Regression: real BaZi questions without birth_date must still 400.
+    The skip_rag bypass shouldn't accidentally weaken the validation for
+    actual BaZi requests."""
+    r = client.post("/fortune", json={
+        "question": "什么是正财格？",  # real divination question, not chitchat
+        "query_type": "bazi",
+        # no birth_date — should fail because skip_rag won't fire
+        "model": "moonshot-v1-8k",
+    })
+    assert r.status_code == 400
+
+
+def test_real_bazi_question_with_birthday_keeps_bazi_type(client):
+    """Sanity: a substantive question with bazi+birthday should NOT downgrade
+    to general — that path is reserved for chitchat only."""
+    r = client.post("/fortune", json={
+        "question": "请帮我分析正财格在我命中的体现",
+        "query_type": "bazi",
+        "birth_date": "1990-01-01 12:00",
+        "birth_gender": "female",
+        "model": "moonshot-v1-8k",
+    })
+    assert r.status_code == 200
+    assert r.json()["query_type"] == "bazi"
+
+
+def test_meta_question_with_forecast_query_type_downgrades(client):
+    """Same downgrade also fires for forecast path — '你能做什么' with a
+    zodiac sign selected should not produce a yearly forecast."""
+    r = client.post("/fortune", json={
+        "question": "你能做什么？",
+        "query_type": "forecast",
+        "zodiac_sign": "Dragon (龙)",
+        "model": "moonshot-v1-8k",
+    })
+    assert r.status_code == 200
+    assert r.json()["query_type"] == "general"
+
+
 def test_unexpected_error_still_maps_to_500(tmp_path, monkeypatch):
     """Errors that aren't recognized 429/timeout patterns still get the
     generic 500 — we don't want to hide bugs behind a misleading 503."""
