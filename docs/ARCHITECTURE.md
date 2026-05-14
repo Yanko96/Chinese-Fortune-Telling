@@ -5,30 +5,34 @@
 ## System Diagram
 
 ```mermaid
-flowchart LR
+flowchart TB
     User([User])
-    User -->|HTTPS| ALB[AWS ALB<br/>:80/:443]
+    User -->|HTTPS| ALB[AWS ALB<br/>:80/:443<br/>idle_timeout=120s]
 
     ALB -->|/| Streamlit[Streamlit App<br/>ECS Service<br/>256 CPU / 512 MB]
     ALB -->|/api/*| FastAPI[FastAPI<br/>ECS Service<br/>512 CPU / 2048 MB]
+    Streamlit -->|REST via ALB /api| FastAPI
 
-    Streamlit -->|REST<br/>via ALB /api| FastAPI
+    FastAPI -->|"should_skip_rag(q) check<br/>(downgrades query_type<br/>to GENERAL on greeting)"| Router{{Query Router<br/>api/retriever_router.py}}
 
-    subgraph Retrieval [HyDE + Rerank Pipeline]
-        direction TB
-        Q[Question]
-        Q -->|1. LLM writes<br/>hypothetical<br/>classical passage| Hypo[HyDE document]
-        Hypo -->|2. embed +<br/>similarity_search k=8| Chroma[(ChromaDB<br/>bge-small-zh-v1.5<br/>666 chunks)]
-        Chroma -->|8 candidates| BGE[BGE Cross-Encoder<br/>bge-reranker-base<br/>baked in image]
-        Q -->|3. score against<br/>original question| BGE
-        BGE -->|top_n=5| Context[Top 5 chunks]
-        Context -->|4. stuff into prompt| Answer[LLM answer]
-    end
+    Router -->|"greeting / meta / thanks<br/>~5 s"| Skip[skip_rag<br/>empty docs<br/>persona prompt only]
+    Router -->|"2+ books OR<br/>2+ entities + compare<br/>~15 s"| Graph[Graph RAG v7<br/>BFS hop=1, max_neighbors=10<br/>vector_filter_k=50]
+    Router -->|"default<br/>~30 s"| HyDE[HyDE + BGE Rerank<br/>k=8 wide recall<br/>top_n=5 after rerank]
 
-    FastAPI --> Retrieval
-    Retrieval -->|Kimi calls 1+4| Kimi[Kimi<br/>moonshot-v1-8k<br/>OpenAI-compatible API]
+    HyDE --> Chroma[(ChromaDB<br/>bge-small-zh-v1.5<br/>671 chunks)]
+    Graph --> Chroma
+    Graph --> KG[(Knowledge Graph<br/>668 nodes / 5,255 edges<br/>41 bridge terms)]
+    HyDE --> BGE[BGE Cross-Encoder<br/>bge-reranker-base<br/>baked in image]
+    Graph --> BGE
 
-    Chroma -. built offline by<br/>scripts/build_index_bge.py .-> Books[fortune_books/<br/>3 PDFs:<br/>《三命通会》<br/>《滴天髓》<br/>《子平真诠》]
+    Skip --> Kimi[Kimi LLM<br/>moonshot-v1-8k<br/>OpenAI-compatible API]
+    HyDE -->|"Kimi call 1: HyDE<br/>Kimi call 2: generation"| Kimi
+    Graph --> Kimi
+
+    Kimi --> Answer([Answer])
+
+    Chroma -. built at Docker build .-> Books[fortune_books/<br/>3 PDFs:<br/>《三命通会》<br/>《滴天髓》<br/>《子平真诠》]
+    KG -. scripts/build_knowledge_graph.py .-> Books
 
     FastAPI -->|chat history| SQLite[(SQLite<br/>rag_app.db<br/>local file)]
 

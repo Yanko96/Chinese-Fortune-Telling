@@ -24,7 +24,7 @@ A production-deployed RAG system over three classical Chinese divination texts (
 
 ## Architecture at a Glance
 
-> **Production retrieval is router-dispatched**: HyDE + BGE Rerank by default (`k=8 → top_n=5`, single-hop winner AVG=0.812), with Graph RAG v7 (`vector_filter_k=50`, multihop winner chain_score=0.729) invoked when a heuristic query classifier detects high-confidence cross-book / multihop intent.
+> **Production retrieval is router-dispatched**: HyDE + BGE Rerank by default (`k=8 → top_n=5`, single-hop winner AVG=0.812), with Graph RAG v7 (`vector_filter_k=50`, multihop winner chain_score=0.729) invoked when a heuristic query classifier detects high-confidence cross-book / multihop intent, and a skip-RAG fast path for greetings / meta / thanks.
 > See [§1a HyDE+Rerank](#1a-hyde--bge-rerank--production-default), [§1b Graph RAG](#1b-graph-rag--multihop-specialist), [§1c Query Router](#1c-query-router--picks-hyde-vs-graph-per-request).
 
 ```mermaid
@@ -33,10 +33,24 @@ flowchart LR
     ALB -->|/| Streamlit[Streamlit App]
     ALB -->|/api/*| API[FastAPI]
     Streamlit -->|REST| API
-    API -->|HyDE → embed → rerank → generate| Pipeline{{HyDE + BGE Rerank<br/>k=8, top_n=5}}
-    Pipeline --> Kimi[Kimi LLM<br/>moonshot-v1-8k]
-    Pipeline --> Chroma[(ChromaDB<br/>671 chunks<br/>bge-small-zh-v1.5)]
-    Pipeline --> BGE[BGE Cross-Encoder<br/>bge-reranker-base<br/>baked in image]
+
+    API --> Router{{"Query Router<br/>(api/retriever_router.py)"}}
+
+    Router -->|"greeting / meta / thanks<br/>~5 s"| Skip[skip_rag<br/>empty docs<br/>no retrieval]
+    Router -->|"2+ books OR<br/>2+ entities + compare kw<br/>~15 s"| Graph[Graph RAG v7<br/>BFS hop=1<br/>vector_filter_k=50]
+    Router -->|"default<br/>~30 s"| HyDE[HyDE + BGE Rerank<br/>k=8 → top_n=5]
+
+    HyDE --> Chroma[(ChromaDB<br/>671 chunks<br/>bge-small-zh-v1.5)]
+    Graph --> Chroma
+    Graph --> KG[(Knowledge Graph<br/>668 nodes<br/>5,255 edges)]
+    HyDE --> BGEx[BGE Cross-Encoder<br/>bge-reranker-base<br/>baked in image]
+    Graph --> BGEx
+
+    Skip --> Kimi[Kimi LLM<br/>moonshot-v1-8k<br/>+ role-played prompt]
+    HyDE --> Kimi
+    Graph --> Kimi
+
+    Kimi --> Answer([Answer])
 ```
 
 Per-request flow (the only path in production):
