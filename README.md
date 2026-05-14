@@ -15,7 +15,7 @@ Running on AWS ECS Fargate behind an ALB (`us-east-1`). Try `你好` for a sub-5
 A production-deployed RAG system over three classical Chinese divination texts (《三命通会》《滴天髓》《子平真诠》), built end-to-end:
 
 - **Retrieval research** — 9 strategies × 28 configurations, evaluated by GPT-4o with Chinese eval embeddings
-- **Full-stack app** — FastAPI + Streamlit + ChromaDB, history-aware HyDE + BGE Rerank pipeline
+- **Full-stack app** — FastAPI + Streamlit + ChromaDB, history-aware retrieval chain with a query router dispatching to skip-RAG / HyDE+Rerank / Graph RAG per request
 - **Production deployment** — AWS ECS / ALB / Terraform, GitHub Actions CI/CD, with 5 real incidents documented and resolved
 
 > 📑 In-depth docs: [Architecture](docs/ARCHITECTURE.md) · [Retrieval Benchmark](docs/BENCHMARK_REPORT.md) · [Deployment Notes](docs/DEPLOYMENT_NOTES.md)
@@ -53,14 +53,17 @@ flowchart LR
     Kimi --> Answer([Answer])
 ```
 
-Per-request flow (the only path in production):
+Per-request flow:
 
-1. **HyDE** — Kimi writes an 80–150 char *hypothetical* classical-Chinese passage in the answering style. This gives the dense retriever a query that looks like the corpus, not like a question.
-2. **Wide recall** — embed the hypothetical via `bge-small-zh-v1.5`, similarity-search **k=8** candidates against the ChromaDB index.
-3. **Rerank** — `bge-reranker-base` cross-encoder re-scores each candidate against the **original** user question (not the hypothesis), keep **top 5**. The cross-encoder is lexical-aware where the dense embedding isn't, so it catches matches the wider HyDE recall over-generalized away.
-4. **Generate** — stuff top-5 chunks into the role-played QA prompt (果赖 persona for BaZi/Forecast, evidence-grounded otherwise), generate via Kimi `moonshot-v1-8k`.
+When a request hits `/api/fortune`, the FastAPI handler first checks the raw user question against `should_skip_rag()` — if it's a greeting/meta/thanks, it downgrades `query_type` from BaZi/Forecast to GENERAL regardless of the frontend's choice (so a user typing `你好` with a birthday selected doesn't get hit with a forced four-pillar calculation). Then it builds a routed retrieval chain that dispatches one of three pipelines per query:
 
-The two LLM calls (HyDE + final generation) plus one rerank pass land end-to-end p50 around **22–30 seconds** on a 0.5 vCPU ECS task — see [docs/DEPLOYMENT_NOTES.md §5](docs/DEPLOYMENT_NOTES.md) for the latency budget that drove the `k=15→8 / top_n=7→5` choice.
+| Branch | Triggers when | Pipeline | p50 latency |
+|---|---|---|:-:|
+| **skip_rag** | greeting / meta / thanks — anchored regex on `你好`/`hi`/`你能做什么`/`谢谢`/… | Empty docs → role-played QA prompt → Kimi | **~5 s** |
+| **HyDE + Rerank** (default) | Single-hop substantive questions | Kimi writes classical-Chinese hypothetical → embed via `bge-small-zh-v1.5` → ChromaDB **k=8** → BGE cross-encoder rerank against the **original** question (catches lexical matches dense embedding smooths over) → **top 5** → QA prompt → Kimi | ~30 s |
+| **Graph RAG v7** | 2+ books mentioned (`《X》《Y》`) **OR** 2+ bridge terms + compare keyword | ChromaDB k=8 seeds → BFS over knowledge graph (hop=1, cross-book only) → `vector_filter_k=50` semantic whitelist → BGE rerank → top 5 → QA prompt → Kimi | ~15 s |
+
+The HyDE and Graph branches both share Chroma + BGE; only Graph additionally consults the knowledge graph. Skip-RAG bypasses retrieval entirely — the LLM persona prompt handles greetings on its own. Per-decision design rationale for each branch is in §1a / §1b / §1c below. The full latency budget that drove `k=15→8 / top_n=7→5` on the HyDE path is in [docs/DEPLOYMENT_NOTES.md §5](docs/DEPLOYMENT_NOTES.md).
 
 Full diagram and per-decision rationale → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -348,7 +351,7 @@ Concrete next iterations, in rough priority order based on user-facing value vs.
 | Backend | FastAPI · LangChain (`langchain-openai`, `langchain-classic`) |
 | Frontend | Streamlit |
 | Vector DB | ChromaDB (file-backed) |
-| Embeddings | `BAAI/bge-small-zh-v1.5` (prod) · `bge-base-zh-v1.5` (Graph RAG offline) |
+| Embeddings | `BAAI/bge-small-zh-v1.5` (production — shared by HyDE and Graph branches) · `bge-base-zh-v1.5` (offline Graph RAG v8 experiment only) |
 | Reranker | `BAAI/bge-reranker-base` (cross-encoder) |
 | LLM | Kimi (Moonshot) `moonshot-v1-8k` / `-32k` / `-128k` via OpenAI-compatible API |
 | Eval | RAGAS · GPT-4o judge · Chinese eval embeddings |
