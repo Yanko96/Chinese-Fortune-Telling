@@ -2,6 +2,16 @@
 
 ![Fortune Teller Banner](./docs/images/fortune_banner1.png)
 
+## 🌐 Live Demo
+
+**[http://fortune-teller-alb-1669179181.us-east-1.elb.amazonaws.com/](http://fortune-teller-alb-1669179181.us-east-1.elb.amazonaws.com/)**
+
+Running on AWS ECS Fargate behind an ALB (`us-east-1`). Try `你好` for a sub-5s skip-RAG greeting, or set a birthday in the sidebar + ask `什么是正财格？` for a full HyDE+Rerank BaZi reading (~30 s).
+
+> **Note**: Backed by a shared Kimi (Moonshot) API key with a finite daily quota. If you see a `503 — upstream LLM is temporarily overloaded` message, the rate limit is hit; retry in a few seconds. Health: [`/api/healthz`](http://fortune-teller-alb-1669179181.us-east-1.elb.amazonaws.com/api/healthz)
+
+---
+
 A production-deployed RAG system over three classical Chinese divination texts (《三命通会》《滴天髓》《子平真诠》), built end-to-end:
 
 - **Retrieval research** — 9 strategies × 28 configurations, evaluated by GPT-4o with Chinese eval embeddings
@@ -43,6 +53,8 @@ Full diagram and per-decision rationale → [docs/ARCHITECTURE.md](docs/ARCHITEC
 ---
 
 ## Quick Start
+
+> Just want to poke at the system? The [live demo](http://fortune-teller-alb-1669179181.us-east-1.elb.amazonaws.com/) is the same code as `main`, deployed via the `deploy.yml` workflow. The instructions below are for running locally.
 
 Prerequisites: Docker + Docker Compose, a [Kimi (Moonshot) API key](https://platform.moonshot.cn).
 
